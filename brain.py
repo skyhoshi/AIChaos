@@ -654,7 +654,7 @@ The chat is controlling the streamer's playthrough of Half-Life 2 via your gener
 Generate valid GLua code to execute that request immediately.
 
 **IMPORTANT: You must return TWO code blocks separated by '---UNDO---':**
-1. The EXECUTION code (what the user requested, aswell as any cleanup)
+1. The EXECUTION code (what the user requested, aswell as any auto cleanup)
 2. The UNDO code (code to reverse/stop the effect)
 
 The undo code should completely reverse any changes, stop timers, remove entities, restore original values, etc.
