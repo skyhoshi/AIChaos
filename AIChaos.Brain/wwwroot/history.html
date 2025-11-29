@@ -305,7 +305,6 @@ ${escapeHtml(cmd.undoCode)}
                             </div>
                         </div>
                         <div class="history-actions">
-                            <button onclick="executePayload(${p.id})" class="btn-info btn-small">▶️ Execute</button>
                             <button onclick="togglePayloadCode(${p.id})" class="btn-secondary btn-small">👁 Code</button>
                             <button onclick="deletePayload(${p.id})" class="btn-danger btn-small">🗑️ Delete</button>
                         </div>
@@ -328,12 +327,6 @@ ${escapeHtml(p.undoCode)}
         function togglePayloadCode(id) {
             const codeDiv = document.getElementById(`payload-code-${id}`);
             codeDiv.classList.toggle('hidden');
-        }
-        
-        async function executePayload(payloadId) {
-            // For now, just show that it would be executed
-            // Future: add a /api/execute_payload endpoint
-            alert('Execute payload functionality will be added in the random chaos mode feature!');
         }
         
         async function deletePayload(payloadId) {

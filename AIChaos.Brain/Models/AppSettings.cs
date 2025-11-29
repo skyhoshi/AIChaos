@@ -64,7 +64,6 @@ public class AdminSettings
 public class TunnelSettings
 {
     public TunnelType Type { get; set; } = TunnelType.None;
-    public string NgrokAuthToken { get; set; } = "";
     public string CurrentUrl { get; set; } = "";
     public bool IsRunning { get; set; } = false;
 }
