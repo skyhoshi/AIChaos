@@ -114,10 +114,6 @@
                     <strong>⚠️ Required for GMod:</strong> GMod does not allow local HTTP connections. You must start a tunnel for GMod to communicate with the brain. The Lua file will be automatically updated with the tunnel URL.
                 </div>
                 
-                <p style="color: var(--text-dim); margin-bottom: 15px;">
-                    Set up a tunnel to expose your local server to GMod. Choose between ngrok or LocalTunnel.
-                </p>
-                
                 <div id="tunnelUrl" class="tunnel-url hidden">
                     <strong>Public URL:</strong> <a id="tunnelUrlLink" href="#" target="_blank"></a>
                     <div style="margin-top: 5px; color: var(--text-dim); font-size: 12px;">
@@ -132,47 +128,59 @@
                     <strong>LocalTunnel Password:</strong> When first visiting, enter your public IP: <code id="publicIp"></code>
                 </div>
                 
-                <!-- Installation instructions -->
-                <div class="setup-step" style="margin-bottom: 20px;">
-                    <div class="step-number">1</div>
-                    <div class="step-content">
-                        <h4>Install a Tunnel Tool (choose one)</h4>
-                        <div style="margin-top: 10px;">
-                            <strong style="color: var(--accent);">Option A: ngrok</strong> (Recommended - more stable)
-                            <ol style="margin: 5px 0 15px 20px; color: var(--text-dim);">
-                                <li>Go to <a href="https://ngrok.com/download" target="_blank" style="color: var(--info);">ngrok.com/download</a></li>
-                                <li>Download and install ngrok for your OS</li>
-                                <li>(Optional) Sign up for free to get an auth token for longer sessions</li>
-                            </ol>
-                            
-                            <strong style="color: var(--accent);">Option B: LocalTunnel</strong> (No signup required)
-                            <ol style="margin: 5px 0 0 20px; color: var(--text-dim);">
-                                <li>Install Node.js from <a href="https://nodejs.org" target="_blank" style="color: var(--info);">nodejs.org</a> if not installed</li>
-                                <li>Run: <code style="background: #333; padding: 2px 6px; border-radius: 3px;">npm install -g localtunnel</code></li>
-                            </ol>
-                        </div>
-                    </div>
-                </div>
+                <!-- Tunnel Comparison Table -->
+                <h4 style="margin-top: 20px; color: var(--accent);">Choose a Tunnel Service</h4>
+                <table style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 14px;">
+                    <thead>
+                        <tr style="background: rgba(0,255,0,0.1);">
+                            <th style="padding: 10px; text-align: left; border: 1px solid var(--border);">Feature</th>
+                            <th style="padding: 10px; text-align: center; border: 1px solid var(--border);">🚀 Bore</th>
+                            <th style="padding: 10px; text-align: center; border: 1px solid var(--border);">📦 LocalTunnel</th>
+                            <th style="padding: 10px; text-align: center; border: 1px solid var(--border);">🔧 ngrok</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="padding: 8px; border: 1px solid var(--border);">Account Required</td>
+                            <td style="padding: 8px; text-align: center; border: 1px solid var(--border); color: var(--success);">❌ No</td>
+                            <td style="padding: 8px; text-align: center; border: 1px solid var(--border); color: var(--success);">❌ No</td>
+                            <td style="padding: 8px; text-align: center; border: 1px solid var(--border); color: var(--warning);">✅ Yes (free tier)</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px; border: 1px solid var(--border);">Password Page for Visitors</td>
+                            <td style="padding: 8px; text-align: center; border: 1px solid var(--border); color: var(--success);">❌ No</td>
+                            <td style="padding: 8px; text-align: center; border: 1px solid var(--border); color: var(--warning);">✅ Yes (IP needed)</td>
+                            <td style="padding: 8px; text-align: center; border: 1px solid var(--border); color: var(--success);">❌ No</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px; border: 1px solid var(--border);">Setup Complexity</td>
+                            <td style="padding: 8px; text-align: center; border: 1px solid var(--border);">Medium (Rust)</td>
+                            <td style="padding: 8px; text-align: center; border: 1px solid var(--border);">Easy (npm)</td>
+                            <td style="padding: 8px; text-align: center; border: 1px solid var(--border);">Easy (download)</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px; border: 1px solid var(--border);">Stability</td>
+                            <td style="padding: 8px; text-align: center; border: 1px solid var(--border);">Good</td>
+                            <td style="padding: 8px; text-align: center; border: 1px solid var(--border);">Good</td>
+                            <td style="padding: 8px; text-align: center; border: 1px solid var(--border); color: var(--success);">Best</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px; border: 1px solid var(--border);">Install Command</td>
+                            <td style="padding: 8px; border: 1px solid var(--border);"><code>cargo install bore-cli</code></td>
+                            <td style="padding: 8px; border: 1px solid var(--border);"><code>npm install -g localtunnel</code></td>
+                            <td style="padding: 8px; border: 1px solid var(--border);"><a href="https://ngrok.com/download" target="_blank" style="color: var(--info);">ngrok.com/download</a></td>
+                        </tr>
+                    </tbody>
+                </table>
                 
-                <div class="setup-step" style="margin-bottom: 20px;">
-                    <div class="step-number">2</div>
-                    <div class="step-content">
-                        <h4>Start the Tunnel</h4>
-                        <p style="color: var(--text-dim);">Click one of the buttons below to start your tunnel. The Lua file will be automatically updated with the public URL.</p>
-                    </div>
-                </div>
-                
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>ngrok Auth Token (optional)</label>
-                        <input type="password" id="ngrokToken" placeholder="Get from ngrok.com/download">
-                        <small>Free tier works without token, but with limits</small>
-                    </div>
-                </div>
+                <p style="color: var(--text-dim); font-size: 13px; margin-bottom: 15px;">
+                    <strong>Recommendation:</strong> Use <strong>Bore</strong> for the simplest experience (no account, no password page). Use <strong>ngrok</strong> for the most stable connection (requires free account setup once).
+                </p>
                 
                 <div class="btn-group">
-                    <button onclick="startNgrok()" id="ngrokStartBtn">🚀 Start ngrok</button>
+                    <button onclick="startBore()" id="boreStartBtn" class="btn-success">🚀 Start Bore</button>
                     <button onclick="startLocalTunnel()" id="ltStartBtn">🚀 Start LocalTunnel</button>
+                    <button onclick="startNgrok()" id="ngrokStartBtn" class="btn-secondary">🚀 Start ngrok</button>
                     <button onclick="stopTunnel()" id="tunnelStopBtn" class="btn-danger hidden">⏹️ Stop Tunnel</button>
                 </div>
                 
@@ -472,6 +480,7 @@
             const tunnelStatus = document.getElementById('tunnelStatus');
             const tunnelUrl = document.getElementById('tunnelUrl');
             const publicIpInfo = document.getElementById('publicIpInfo');
+            const boreStartBtn = document.getElementById('boreStartBtn');
             const ngrokStartBtn = document.getElementById('ngrokStartBtn');
             const ltStartBtn = document.getElementById('ltStartBtn');
             const tunnelStopBtn = document.getElementById('tunnelStopBtn');
@@ -483,6 +492,7 @@
                 document.getElementById('tunnelUrlLink').href = data.tunnel.url;
                 document.getElementById('tunnelUrlLink').textContent = data.tunnel.url;
                 document.getElementById('pollUrl').textContent = data.tunnel.url + '/poll';
+                boreStartBtn.classList.add('hidden');
                 ngrokStartBtn.classList.add('hidden');
                 ltStartBtn.classList.add('hidden');
                 tunnelStopBtn.classList.remove('hidden');
@@ -498,6 +508,7 @@
                 tunnelStatus.className = 'status-badge status-disconnected';
                 tunnelUrl.classList.add('hidden');
                 publicIpInfo.classList.add('hidden');
+                boreStartBtn.classList.remove('hidden');
                 ngrokStartBtn.classList.remove('hidden');
                 ltStartBtn.classList.remove('hidden');
                 tunnelStopBtn.classList.add('hidden');
@@ -549,17 +560,44 @@
         }
         
         // Tunnel functions
+        async function startBore() {
+            const errorDiv = document.getElementById('tunnelError');
+            errorDiv.classList.add('hidden');
+            
+            try {
+                showAlert('Starting Bore...', 'info');
+                const response = await fetch('/api/setup/tunnel/bore/start', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    showAlert(`Bore started: ${data.url}`, 'success');
+                    loadSetupStatus();
+                } else {
+                    const errorMsg = data.message || 'Failed to start Bore';
+                    errorDiv.innerHTML = `<strong>❌ Error:</strong> ${errorMsg}<br><br>
+                        <strong>To install Bore:</strong><br>
+                        1. Install Rust from <a href="https://rustup.rs" target="_blank" style="color: var(--info);">rustup.rs</a><br>
+                        2. Run: <code style="background: #333; padding: 2px 6px; border-radius: 3px;">cargo install bore-cli</code><br>
+                        <em>Or download binary from <a href="https://github.com/ekzhang/bore/releases" target="_blank" style="color: var(--info);">GitHub Releases</a></em>`;
+                    errorDiv.classList.remove('hidden');
+                    showAlert(errorMsg, 'error');
+                }
+            } catch (err) {
+                showAlert('Network error', 'error');
+            }
+        }
+        
         async function startNgrok() {
-            const authToken = document.getElementById('ngrokToken').value;
             const errorDiv = document.getElementById('tunnelError');
             errorDiv.classList.add('hidden');
             
             try {
                 showAlert('Starting ngrok...', 'info');
                 const response = await fetch('/api/setup/tunnel/ngrok/start', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ authToken: authToken || null })
+                    method: 'POST'
                 });
                 
                 const data = await response.json();
@@ -573,7 +611,7 @@
                         <strong>To install ngrok:</strong><br>
                         1. Download from <a href="https://ngrok.com/download" target="_blank" style="color: var(--info);">ngrok.com/download</a><br>
                         2. Extract and add to your PATH<br>
-                        3. (Optional) Run: <code>ngrok config add-authtoken YOUR_TOKEN</code>`;
+                        3. Sign up for free and run: <code>ngrok config add-authtoken YOUR_TOKEN</code>`;
                     errorDiv.classList.remove('hidden');
                     showAlert(errorMsg, 'error');
                 }

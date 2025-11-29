@@ -187,6 +187,15 @@ button:disabled {
     color: #000;
 }
 
+.btn-success {
+    background: var(--success);
+    color: #000;
+}
+
+.btn-success:hover {
+    background: var(--primary-dark);
+}
+
 .btn-small {
     padding: 5px 10px;
     font-size: 12px;

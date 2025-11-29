@@ -5,7 +5,7 @@ using AIChaos.Brain.Models;
 namespace AIChaos.Brain.Services;
 
 /// <summary>
-/// Service for managing tunnel connections (ngrok, localtunnel).
+/// Service for managing tunnel connections (ngrok, localtunnel, bore).
 /// </summary>
 public partial class TunnelService : IDisposable
 {
@@ -33,7 +33,7 @@ public partial class TunnelService : IDisposable
     /// <summary>
     /// Starts an ngrok tunnel.
     /// </summary>
-    public async Task<(bool Success, string? Url, string? Error)> StartNgrokAsync(string? authToken = null)
+    public async Task<(bool Success, string? Url, string? Error)> StartNgrokAsync()
     {
         if (IsRunning)
         {
@@ -46,17 +46,7 @@ public partial class TunnelService : IDisposable
             var checkResult = await RunCommandAsync("ngrok", "version");
             if (!checkResult.Success)
             {
-                return (false, null, "ngrok is not installed. Please install it from https://ngrok.com/download");
-            }
-            
-            // Configure auth token if provided
-            if (!string.IsNullOrEmpty(authToken))
-            {
-                var authResult = await RunCommandAsync("ngrok", $"config add-authtoken {authToken}");
-                if (!authResult.Success)
-                {
-                    _logger.LogWarning("Failed to set ngrok auth token: {Error}", authResult.Output);
-                }
+                return (false, null, "ngrok is not installed. Please install it from https://ngrok.com/download and run 'ngrok config add-authtoken YOUR_TOKEN' to configure it.");
             }
             
             // Start ngrok
@@ -83,7 +73,7 @@ public partial class TunnelService : IDisposable
             if (url == null)
             {
                 Stop();
-                return (false, null, "Failed to get ngrok URL. Make sure ngrok is properly configured.");
+                return (false, null, "Failed to get ngrok URL. Make sure ngrok is properly configured with 'ngrok config add-authtoken YOUR_TOKEN'.");
             }
             
             CurrentUrl = url;
@@ -94,10 +84,6 @@ public partial class TunnelService : IDisposable
             tunnel.Type = TunnelType.Ngrok;
             tunnel.CurrentUrl = url;
             tunnel.IsRunning = true;
-            if (!string.IsNullOrEmpty(authToken))
-            {
-                tunnel.NgrokAuthToken = authToken;
-            }
             _settingsService.UpdateTunnel(tunnel);
             
             // Update Lua file
@@ -177,6 +163,72 @@ public partial class TunnelService : IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to start localtunnel");
+            return (false, null, ex.Message);
+        }
+    }
+    
+    /// <summary>
+    /// Starts a Bore tunnel (bore.pub).
+    /// </summary>
+    public async Task<(bool Success, string? Url, string? Error)> StartBoreAsync()
+    {
+        if (IsRunning)
+        {
+            return (false, null, "A tunnel is already running. Stop it first.");
+        }
+        
+        try
+        {
+            // Check if bore is installed
+            var checkResult = await RunCommandAsync("bore", "--version");
+            if (!checkResult.Success)
+            {
+                return (false, null, "bore is not installed. Install it with: cargo install bore-cli (requires Rust)");
+            }
+            
+            // Start bore - bore local <port> --to bore.pub
+            _tunnelProcess = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "bore",
+                    Arguments = "local 5000 --to bore.pub",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                }
+            };
+            
+            _tunnelProcess.Start();
+            _logger.LogInformation("bore started with PID {Pid}", _tunnelProcess.Id);
+            
+            // Read output to get URL (bore outputs to stderr)
+            var url = await GetBoreUrlAsync();
+            if (url == null)
+            {
+                Stop();
+                return (false, null, "Failed to get bore URL. Make sure bore.pub is accessible.");
+            }
+            
+            CurrentUrl = url;
+            CurrentType = TunnelType.Bore;
+            
+            // Update settings
+            var tunnel = _settingsService.Settings.Tunnel;
+            tunnel.Type = TunnelType.Bore;
+            tunnel.CurrentUrl = url;
+            tunnel.IsRunning = true;
+            _settingsService.UpdateTunnel(tunnel);
+            
+            // Update Lua file
+            await UpdateLuaFileAsync(url);
+            
+            return (true, url, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to start bore");
             return (false, null, ex.Message);
         }
     }
@@ -279,6 +331,36 @@ public partial class TunnelService : IDisposable
                 if (match.Success)
                 {
                     return match.Value;
+                }
+            }
+        }
+        return null;
+    }
+    
+    private async Task<string?> GetBoreUrlAsync()
+    {
+        if (_tunnelProcess == null) return null;
+        
+        var timeout = DateTime.UtcNow.AddSeconds(30);
+        
+        // Read from stderr as bore outputs there
+        while (DateTime.UtcNow < timeout)
+        {
+            if (_tunnelProcess.HasExited)
+            {
+                return null;
+            }
+            
+            var line = await _tunnelProcess.StandardError.ReadLineAsync();
+            if (!string.IsNullOrEmpty(line))
+            {
+                _logger.LogDebug("bore output: {Line}", line);
+                // Bore outputs something like: "listening at bore.pub:12345"
+                var match = BorePortRegex().Match(line);
+                if (match.Success)
+                {
+                    var port = match.Groups[1].Value;
+                    return $"http://bore.pub:{port}";
                 }
             }
         }
@@ -395,6 +477,9 @@ public partial class TunnelService : IDisposable
     
     [GeneratedRegex(@"https://[^\s]+")]
     private static partial Regex UrlRegex();
+    
+    [GeneratedRegex(@"bore\.pub:(\d+)")]
+    private static partial Regex BorePortRegex();
     
     [GeneratedRegex(@"local SERVER_URL = "".*?"".*")]
     private static partial Regex ServerUrlRegex();

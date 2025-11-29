@@ -115,9 +115,9 @@ public class SetupController : ControllerBase
     /// Start ngrok tunnel.
     /// </summary>
     [HttpPost("tunnel/ngrok/start")]
-    public async Task<ActionResult> StartNgrok([FromBody] NgrokStartRequest? request = null)
+    public async Task<ActionResult> StartNgrok()
     {
-        var (success, url, error) = await _tunnelService.StartNgrokAsync(request?.AuthToken);
+        var (success, url, error) = await _tunnelService.StartNgrokAsync();
         
         if (success)
         {
@@ -148,6 +148,27 @@ public class SetupController : ControllerBase
                 url,
                 publicIp = _tunnelService.PublicIp,
                 note = "LocalTunnel requires entering your public IP as password on first visit"
+            });
+        }
+        
+        return BadRequest(new { status = "error", message = error });
+    }
+    
+    /// <summary>
+    /// Start Bore tunnel (bore.pub).
+    /// </summary>
+    [HttpPost("tunnel/bore/start")]
+    public async Task<ActionResult> StartBore()
+    {
+        var (success, url, error) = await _tunnelService.StartBoreAsync();
+        
+        if (success)
+        {
+            return Ok(new { 
+                status = "success", 
+                message = "bore started", 
+                url,
+                note = "Bore provides direct access - no account or password required!"
             });
         }
         
@@ -549,9 +570,4 @@ public class SetPasswordRequest
 {
     public string? CurrentPassword { get; set; }
     public string NewPassword { get; set; } = "";
-}
-
-public class NgrokStartRequest
-{
-    public string? AuthToken { get; set; }
 }

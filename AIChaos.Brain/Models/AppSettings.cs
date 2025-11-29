@@ -73,5 +73,19 @@ public enum TunnelType
 {
     None,
     Ngrok,
-    LocalTunnel
+    LocalTunnel,
+    Bore
+}
+
+/// <summary>
+/// Represents a saved payload for random chaos mode.
+/// </summary>
+public class SavedPayload
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public string UserPrompt { get; set; } = "";
+    public string ExecutionCode { get; set; } = "";
+    public string UndoCode { get; set; } = "";
+    public DateTime SavedAt { get; set; } = DateTime.UtcNow;
 }

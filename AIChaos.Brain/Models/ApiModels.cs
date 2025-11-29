@@ -118,7 +118,7 @@ public class YouTubeAuthState
 }
 
 /// <summary>
-/// Tunnel state for ngrok/localtunnel.
+/// Tunnel state for ngrok/localtunnel/bore.
 /// </summary>
 public class TunnelState
 {
@@ -139,4 +139,29 @@ public class SetupStatus
     public TwitchAuthState Twitch { get; set; } = new();
     public YouTubeAuthState YouTube { get; set; } = new();
     public TunnelState Tunnel { get; set; } = new();
+}
+
+/// <summary>
+/// Request to save a command payload.
+/// </summary>
+public class SavePayloadRequest
+{
+    public int CommandId { get; set; }
+    public string Name { get; set; } = "";
+}
+
+/// <summary>
+/// Request to delete a saved payload.
+/// </summary>
+public class DeletePayloadRequest
+{
+    public int PayloadId { get; set; }
+}
+
+/// <summary>
+/// Response containing saved payloads.
+/// </summary>
+public class SavedPayloadsResponse
+{
+    public List<SavedPayload> Payloads { get; set; } = new();
 }

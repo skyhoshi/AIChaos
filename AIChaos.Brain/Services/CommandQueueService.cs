@@ -9,8 +9,10 @@ public class CommandQueueService
 {
     private readonly List<string> _queue = new();
     private readonly List<CommandEntry> _history = new();
+    private readonly List<SavedPayload> _savedPayloads = new();
     private readonly object _lock = new();
     private int _nextId = 1;
+    private int _nextPayloadId = 1;
     
     public UserPreferences Preferences { get; } = new();
     
@@ -150,6 +152,54 @@ public class CommandQueueService
         lock (_lock)
         {
             return _history.TakeLast(count).ToList();
+        }
+    }
+    
+    /// <summary>
+    /// Saves a command payload for random chaos mode.
+    /// </summary>
+    public SavedPayload SavePayload(CommandEntry command, string name)
+    {
+        lock (_lock)
+        {
+            var payload = new SavedPayload
+            {
+                Id = _nextPayloadId++,
+                Name = string.IsNullOrEmpty(name) ? command.UserPrompt : name,
+                UserPrompt = command.UserPrompt,
+                ExecutionCode = command.ExecutionCode,
+                UndoCode = command.UndoCode,
+                SavedAt = DateTime.UtcNow
+            };
+            
+            _savedPayloads.Add(payload);
+            return payload;
+        }
+    }
+    
+    /// <summary>
+    /// Gets all saved payloads.
+    /// </summary>
+    public List<SavedPayload> GetSavedPayloads()
+    {
+        lock (_lock)
+        {
+            return new List<SavedPayload>(_savedPayloads);
+        }
+    }
+    
+    /// <summary>
+    /// Deletes a saved payload.
+    /// </summary>
+    public bool DeletePayload(int payloadId)
+    {
+        lock (_lock)
+        {
+            var payload = _savedPayloads.FirstOrDefault(p => p.Id == payloadId);
+            if (payload == null) return false;
+            
+            _savedPayloads.Remove(payload);
+            return true;
         }
     }
 }

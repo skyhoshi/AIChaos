@@ -231,4 +231,66 @@ public class ChaosController : ControllerBase
             Message = "History cleared"
         });
     }
+    
+    /// <summary>
+    /// Saves a command payload for random chaos mode.
+    /// </summary>
+    [HttpPost("api/save_payload")]
+    public ActionResult<ApiResponse> SavePayload([FromBody] SavePayloadRequest request)
+    {
+        var command = _commandQueue.GetCommand(request.CommandId);
+        if (command == null)
+        {
+            return NotFound(new ApiResponse
+            {
+                Status = "error",
+                Message = "Command not found in history"
+            });
+        }
+        
+        var payload = _commandQueue.SavePayload(command, request.Name);
+        _logger.LogInformation("[SAVED PAYLOAD] Saved command #{CommandId} as '{Name}'", request.CommandId, request.Name);
+        
+        return Ok(new ApiResponse
+        {
+            Status = "success",
+            Message = $"Payload saved as '{payload.Name}'",
+            CommandId = payload.Id
+        });
+    }
+    
+    /// <summary>
+    /// Gets all saved payloads.
+    /// </summary>
+    [HttpGet("api/saved_payloads")]
+    public ActionResult<SavedPayloadsResponse> GetSavedPayloads()
+    {
+        return Ok(new SavedPayloadsResponse
+        {
+            Payloads = _commandQueue.GetSavedPayloads()
+        });
+    }
+    
+    /// <summary>
+    /// Deletes a saved payload.
+    /// </summary>
+    [HttpPost("api/delete_payload")]
+    public ActionResult<ApiResponse> DeletePayload([FromBody] DeletePayloadRequest request)
+    {
+        if (_commandQueue.DeletePayload(request.PayloadId))
+        {
+            _logger.LogInformation("[SAVED PAYLOAD] Deleted payload #{PayloadId}", request.PayloadId);
+            return Ok(new ApiResponse
+            {
+                Status = "success",
+                Message = "Payload deleted"
+            });
+        }
+        
+        return NotFound(new ApiResponse
+        {
+            Status = "error",
+            Message = "Payload not found"
+        });
+    }
 }
