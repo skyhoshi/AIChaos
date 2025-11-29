@@ -132,6 +132,36 @@
                     <strong>LocalTunnel Password:</strong> When first visiting, enter your public IP: <code id="publicIp"></code>
                 </div>
                 
+                <!-- Installation instructions -->
+                <div class="setup-step" style="margin-bottom: 20px;">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h4>Install a Tunnel Tool (choose one)</h4>
+                        <div style="margin-top: 10px;">
+                            <strong style="color: var(--accent);">Option A: ngrok</strong> (Recommended - more stable)
+                            <ol style="margin: 5px 0 15px 20px; color: var(--text-dim);">
+                                <li>Go to <a href="https://ngrok.com/download" target="_blank" style="color: var(--info);">ngrok.com/download</a></li>
+                                <li>Download and install ngrok for your OS</li>
+                                <li>(Optional) Sign up for free to get an auth token for longer sessions</li>
+                            </ol>
+                            
+                            <strong style="color: var(--accent);">Option B: LocalTunnel</strong> (No signup required)
+                            <ol style="margin: 5px 0 0 20px; color: var(--text-dim);">
+                                <li>Install Node.js from <a href="https://nodejs.org" target="_blank" style="color: var(--info);">nodejs.org</a> if not installed</li>
+                                <li>Run: <code style="background: #333; padding: 2px 6px; border-radius: 3px;">npm install -g localtunnel</code></li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="setup-step" style="margin-bottom: 20px;">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h4>Start the Tunnel</h4>
+                        <p style="color: var(--text-dim);">Click one of the buttons below to start your tunnel. The Lua file will be automatically updated with the public URL.</p>
+                    </div>
+                </div>
+                
                 <div class="form-row">
                     <div class="form-group">
                         <label>ngrok Auth Token (optional)</label>
@@ -145,6 +175,8 @@
                     <button onclick="startLocalTunnel()" id="ltStartBtn">🚀 Start LocalTunnel</button>
                     <button onclick="stopTunnel()" id="tunnelStopBtn" class="btn-danger hidden">⏹️ Stop Tunnel</button>
                 </div>
+                
+                <div id="tunnelError" class="alert alert-danger hidden" style="margin-top: 15px;"></div>
             </div>
             
             <!-- Twitch Integration -->
@@ -519,6 +551,8 @@
         // Tunnel functions
         async function startNgrok() {
             const authToken = document.getElementById('ngrokToken').value;
+            const errorDiv = document.getElementById('tunnelError');
+            errorDiv.classList.add('hidden');
             
             try {
                 showAlert('Starting ngrok...', 'info');
@@ -534,7 +568,14 @@
                     showAlert(`ngrok started: ${data.url}`, 'success');
                     loadSetupStatus();
                 } else {
-                    showAlert(data.message || 'Failed to start ngrok', 'error');
+                    const errorMsg = data.message || 'Failed to start ngrok';
+                    errorDiv.innerHTML = `<strong>❌ Error:</strong> ${errorMsg}<br><br>
+                        <strong>To install ngrok:</strong><br>
+                        1. Download from <a href="https://ngrok.com/download" target="_blank" style="color: var(--info);">ngrok.com/download</a><br>
+                        2. Extract and add to your PATH<br>
+                        3. (Optional) Run: <code>ngrok config add-authtoken YOUR_TOKEN</code>`;
+                    errorDiv.classList.remove('hidden');
+                    showAlert(errorMsg, 'error');
                 }
             } catch (err) {
                 showAlert('Network error', 'error');
@@ -542,6 +583,9 @@
         }
         
         async function startLocalTunnel() {
+            const errorDiv = document.getElementById('tunnelError');
+            errorDiv.classList.add('hidden');
+            
             try {
                 showAlert('Starting LocalTunnel...', 'info');
                 const response = await fetch('/api/setup/tunnel/localtunnel/start', {
@@ -554,7 +598,13 @@
                     showAlert(`LocalTunnel started: ${data.url}`, 'success');
                     loadSetupStatus();
                 } else {
-                    showAlert(data.message || 'Failed to start LocalTunnel', 'error');
+                    const errorMsg = data.message || 'Failed to start LocalTunnel';
+                    errorDiv.innerHTML = `<strong>❌ Error:</strong> ${errorMsg}<br><br>
+                        <strong>To install LocalTunnel:</strong><br>
+                        1. Install Node.js from <a href="https://nodejs.org" target="_blank" style="color: var(--info);">nodejs.org</a><br>
+                        2. Run: <code style="background: #333; padding: 2px 6px; border-radius: 3px;">npm install -g localtunnel</code>`;
+                    errorDiv.classList.remove('hidden');
+                    showAlert(errorMsg, 'error');
                 }
             } catch (err) {
                 showAlert('Network error', 'error');
