@@ -680,7 +680,7 @@ GROUND RULES:
 
 6. **POV Awareness:** Try to make sure things happen where the player can see them (unless otherwise stated for comedic effect). For example, spawning something in front of the player rather than behind them or at world origin.
 
-7. DONT CHANGE THE LEVEL FFS PLEASE
+7. **CRITICAL - NEVER CHANGE THE LEVEL:** ABSOLUTELY DO NOT use 'changelevel', 'RunConsoleCommand' with 'map', or ANY command that changes/loads a different map. This is STRICTLY FORBIDDEN and will result in your code being blocked.
 
 8. You can do advanced UI in HTML, for better effects and fancy styling. and js
 
@@ -862,6 +862,15 @@ def trigger():
     user_request = data.get('prompt')
     if not user_request: return jsonify({"error": "No prompt"}), 400
 
+    # 0. Block changelevel attempts
+    changelevel_keywords = ['changelevel', 'change level', 'next map', 'load map', 'switch map', 'new map', 'RunConsoleCommand.*map']
+    if any(keyword.lower() in user_request.lower() for keyword in changelevel_keywords):
+        print(f"[SAFETY] Blocked changelevel attempt: {user_request}")
+        return jsonify({
+            "status": "ignored", 
+            "message": "Map/level changing is blocked for safety."
+        })
+
     # 1. Sanitize & Scan (Blocks bad images, extracts text/context)
     # If ENABLE_IMAGES is false, this returns immediately with empty context
     safe_request, image_context, was_blocked = sanitize_and_scan(user_request)
@@ -880,6 +889,16 @@ def trigger():
 
     # 2. Generate Code with Undo
     execution_code, undo_code = generate_lua(safe_request, current_map, image_context)
+    
+    # 2.5. Post-generation safety check for changelevel commands
+    dangerous_patterns = ['changelevel', 'RunConsoleCommand.*"map"', 'RunConsoleCommand.*\'map\'', 'game.ConsoleCommand.*map']
+    if any(re.search(pattern, execution_code, re.IGNORECASE) for pattern in dangerous_patterns):
+        print(f"[SAFETY] AI tried to generate changelevel code - blocking!")
+        return jsonify({
+            "status": "ignored", 
+            "message": "Generated code attempted to change map (blocked)."
+        })
+    
     command_queue.append(execution_code)
     
     # 3. Store in history if enabled
