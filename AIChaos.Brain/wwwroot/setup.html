@@ -109,6 +109,11 @@
                     🌐 Tunnel Configuration
                     <span id="tunnelStatus" class="status-badge status-disconnected">Not Running</span>
                 </h2>
+                
+                <div class="alert alert-warning" style="margin-bottom: 15px;">
+                    <strong>⚠️ Required for GMod:</strong> GMod does not allow local HTTP connections. You must start a tunnel for GMod to communicate with the brain. The Lua file will be automatically updated with the tunnel URL.
+                </div>
+                
                 <p style="color: var(--text-dim); margin-bottom: 15px;">
                     Set up a tunnel to expose your local server to GMod. Choose between ngrok or LocalTunnel.
                 </p>
@@ -116,7 +121,10 @@
                 <div id="tunnelUrl" class="tunnel-url hidden">
                     <strong>Public URL:</strong> <a id="tunnelUrlLink" href="#" target="_blank"></a>
                     <div style="margin-top: 5px; color: var(--text-dim); font-size: 12px;">
-                        Poll URL: <span id="pollUrl"></span>
+                        Poll URL (for GMod): <code id="pollUrl"></code>
+                    </div>
+                    <div style="margin-top: 5px; color: var(--success); font-size: 12px;">
+                        ✅ Lua file updated automatically - copy lua/ folder to your GMod addons
                     </div>
                 </div>
                 

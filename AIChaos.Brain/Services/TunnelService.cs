@@ -311,15 +311,34 @@ public partial class TunnelService : IDisposable
     
     private async Task UpdateLuaFileAsync(string url)
     {
-        var luaPath = Path.Combine(AppContext.BaseDirectory, "..", "lua", "autorun", "ai_chaos_controller.lua");
-        if (!File.Exists(luaPath))
+        // Try multiple possible paths to find the Lua file
+        var possiblePaths = new[]
         {
-            luaPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "lua", "autorun", "ai_chaos_controller.lua");
+            // Relative to the project directory (when running from source)
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "lua", "autorun", "ai_chaos_controller.lua"),
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "lua", "autorun", "ai_chaos_controller.lua"),
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "lua", "autorun", "ai_chaos_controller.lua"),
+            Path.Combine(AppContext.BaseDirectory, "..", "lua", "autorun", "ai_chaos_controller.lua"),
+            // Relative to current working directory
+            Path.Combine(Directory.GetCurrentDirectory(), "..", "lua", "autorun", "ai_chaos_controller.lua"),
+            Path.Combine(Directory.GetCurrentDirectory(), "lua", "autorun", "ai_chaos_controller.lua"),
+        };
+        
+        string? luaPath = null;
+        foreach (var path in possiblePaths)
+        {
+            var fullPath = Path.GetFullPath(path);
+            if (File.Exists(fullPath))
+            {
+                luaPath = fullPath;
+                break;
+            }
         }
         
-        if (!File.Exists(luaPath))
+        if (luaPath == null)
         {
-            _logger.LogWarning("Lua file not found, skipping update");
+            _logger.LogWarning("Lua file not found in any expected location. GMod addon should be in ../lua/ relative to AIChaos.Brain");
+            _logger.LogWarning("Tunnel URL for GMod: {Url}/poll - Please update your Lua file manually or copy it to the correct location", url);
             return;
         }
         
@@ -327,12 +346,13 @@ public partial class TunnelService : IDisposable
         {
             var content = await File.ReadAllTextAsync(luaPath);
             var pollUrl = $"{url}/poll";
-            var newLine = $"    local SERVER_URL = \"{pollUrl}\" -- Auto-configured by launcher";
+            var newLine = $"                local SERVER_URL = \"{pollUrl}\" -- Auto-configured by launcher";
             
             content = ServerUrlRegex().Replace(content, newLine);
             
             await File.WriteAllTextAsync(luaPath, content);
             _logger.LogInformation("Updated Lua file with URL: {Url}", pollUrl);
+            _logger.LogInformation("Lua file location: {Path}", luaPath);
         }
         catch (Exception ex)
         {
