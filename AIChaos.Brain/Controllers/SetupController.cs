@@ -240,6 +240,7 @@ public class SetupController : ControllerBase
             new { id = "openai/gpt-4-turbo", name = "GPT-4 Turbo", provider = "OpenAI" },
             new { id = "openai/gpt-4", name = "GPT-4", provider = "OpenAI" },
             new { id = "google/gemini-pro-1.5", name = "Gemini Pro 1.5", provider = "Google" },
+            new { id = "google/gemini-2.5-flash", name = "Gemini Flash 2.5", provider = "Google" },
             new { id = "google/gemini-flash-1.5", name = "Gemini Flash 1.5", provider = "Google" },
             new { id = "meta-llama/llama-3.1-70b-instruct", name = "Llama 3.1 70B", provider = "Meta" },
             new { id = "mistralai/mixtral-8x22b-instruct", name = "Mixtral 8x22B", provider = "Mistral" }
