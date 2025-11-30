@@ -32,6 +32,13 @@ public class SettingsService
         }
     }
     
+    // Shared JSON options for consistent serialization (PascalCase for settings file)
+    private static readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        WriteIndented = true
+    };
+    
     /// <summary>
     /// Loads settings from disk or returns defaults.
     /// </summary>
@@ -42,10 +49,7 @@ public class SettingsService
             if (File.Exists(_settingsPath))
             {
                 var json = File.ReadAllText(_settingsPath);
-                var settings = JsonSerializer.Deserialize<AppSettings>(json, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
+                var settings = JsonSerializer.Deserialize<AppSettings>(json, _jsonOptions);
                 
                 if (settings != null)
                 {
@@ -71,10 +75,7 @@ public class SettingsService
         {
             try
             {
-                var json = JsonSerializer.Serialize(_settings, new JsonSerializerOptions
-                {
-                    WriteIndented = true
-                });
+                var json = JsonSerializer.Serialize(_settings, _jsonOptions);
                 File.WriteAllText(_settingsPath, json);
                 _logger.LogInformation("Settings saved to {Path}", _settingsPath);
             }
