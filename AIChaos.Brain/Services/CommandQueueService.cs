@@ -8,7 +8,7 @@ namespace AIChaos.Brain.Services;
 /// </summary>
 public class CommandQueueService
 {
-    private readonly List<string> _queue = new();
+    private readonly List<(int CommandId, string Code)> _queue = new();
     private readonly List<CommandEntry> _history = new();
     private readonly List<SavedPayload> _savedPayloads = new();
     private readonly object _lock = new();
@@ -33,9 +33,6 @@ public class CommandQueueService
     {
         lock (_lock)
         {
-            // Add to execution queue
-            _queue.Add(executionCode);
-            
             // Create history entry
             var entry = new CommandEntry
             {
@@ -49,6 +46,9 @@ public class CommandQueueService
                 Author = author,
                 Status = CommandStatus.Queued
             };
+            
+            // Add to execution queue with ID
+            _queue.Add((entry.Id, executionCode));
             
             _history.Add(entry);
             
@@ -64,16 +64,17 @@ public class CommandQueueService
     
     /// <summary>
     /// Polls for the next command in the queue.
+    /// Returns both the command ID and code so GMod can report back results.
     /// </summary>
-    public string? PollNextCommand()
+    public (int CommandId, string Code)? PollNextCommand()
     {
         lock (_lock)
         {
             if (_queue.Count > 0)
             {
-                var code = _queue[0];
+                var item = _queue[0];
                 _queue.RemoveAt(0);
-                return code;
+                return item;
             }
             return null;
         }
@@ -111,7 +112,7 @@ public class CommandQueueService
             var command = _history.FirstOrDefault(c => c.Id == commandId);
             if (command == null) return false;
             
-            _queue.Add(command.ExecutionCode);
+            _queue.Add((commandId, command.ExecutionCode));
             return true;
         }
     }
@@ -126,20 +127,45 @@ public class CommandQueueService
             var command = _history.FirstOrDefault(c => c.Id == commandId);
             if (command == null) return false;
             
-            _queue.Add(command.UndoCode);
+            _queue.Add((commandId, command.UndoCode));
             command.Status = CommandStatus.Undone;
             return true;
         }
     }
     
     /// <summary>
-    /// Queues force undo code.
+    /// Queues force undo code (no command ID tracking).
     /// </summary>
     public void QueueCode(string code)
     {
         lock (_lock)
         {
-            _queue.Add(code);
+            // Use -1 as command ID for ad-hoc code (force undo, etc.)
+            _queue.Add((-1, code));
+        }
+    }
+    
+    /// <summary>
+    /// Reports the execution result from GMod.
+    /// </summary>
+    public bool ReportExecutionResult(int commandId, bool success, string? error)
+    {
+        lock (_lock)
+        {
+            var command = _history.FirstOrDefault(c => c.Id == commandId);
+            if (command == null) return false;
+            
+            command.ExecutedAt = DateTime.UtcNow;
+            if (success)
+            {
+                command.Status = CommandStatus.Executed;
+            }
+            else
+            {
+                command.Status = CommandStatus.Failed;
+                command.ErrorMessage = error;
+            }
+            return true;
         }
     }
     

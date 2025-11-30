@@ -39,16 +39,64 @@ public class ChaosController : ControllerBase
         // Log incoming request for debugging
         _logger.LogDebug("Poll request received from {RemoteIp}", HttpContext.Connection.RemoteIpAddress);
         
-        var code = _commandQueue.PollNextCommand();
+        var result = _commandQueue.PollNextCommand();
         
         // Add ngrok bypass header in response (helps with some ngrok configurations)
         Response.Headers.Append("ngrok-skip-browser-warning", "true");
         
+        if (result.HasValue)
+        {
+            return new PollResponse
+            {
+                HasCode = true,
+                Code = result.Value.Code,
+                CommandId = result.Value.CommandId
+            };
+        }
+        
         return new PollResponse
         {
-            HasCode = code != null,
-            Code = code
+            HasCode = false,
+            Code = null,
+            CommandId = null
         };
+    }
+    
+    /// <summary>
+    /// Reports execution result from GMod (success or error).
+    /// </summary>
+    [HttpPost("report")]
+    public ActionResult<ApiResponse> ReportResult([FromBody] ExecutionResultRequest request)
+    {
+        if (request.CommandId <= 0)
+        {
+            return Ok(new ApiResponse { Status = "ignored", Message = "No command ID to report" });
+        }
+        
+        if (_commandQueue.ReportExecutionResult(request.CommandId, request.Success, request.Error))
+        {
+            if (request.Success)
+            {
+                _logger.LogInformation("[EXECUTED] Command #{CommandId} executed successfully", request.CommandId);
+            }
+            else
+            {
+                _logger.LogWarning("[ERROR] Command #{CommandId} failed: {Error}", request.CommandId, request.Error);
+            }
+            
+            return Ok(new ApiResponse
+            {
+                Status = "success",
+                Message = request.Success ? "Execution recorded" : "Error recorded",
+                CommandId = request.CommandId
+            });
+        }
+        
+        return NotFound(new ApiResponse
+        {
+            Status = "error",
+            Message = "Command not found in history"
+        });
     }
     
     /// <summary>

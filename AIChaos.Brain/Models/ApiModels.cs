@@ -16,6 +16,8 @@ public class CommandEntry
     public string Source { get; set; } = "web"; // web, twitch, youtube
     public string Author { get; set; } = "anonymous";
     public CommandStatus Status { get; set; } = CommandStatus.Pending;
+    public string? ErrorMessage { get; set; }
+    public DateTime? ExecutedAt { get; set; }
 }
 
 public enum CommandStatus
@@ -61,6 +63,9 @@ public class PollResponse
     
     [JsonPropertyName("code")]
     public string? Code { get; set; }
+    
+    [JsonPropertyName("command_id")]
+    public int? CommandId { get; set; }
 }
 
 /// <summary>
@@ -169,4 +174,19 @@ public class DeletePayloadRequest
 public class SavedPayloadsResponse
 {
     public List<SavedPayload> Payloads { get; set; } = new();
+}
+
+/// <summary>
+/// Request to report command execution result from GMod.
+/// </summary>
+public class ExecutionResultRequest
+{
+    [JsonPropertyName("command_id")]
+    public int CommandId { get; set; }
+    
+    [JsonPropertyName("success")]
+    public bool Success { get; set; }
+    
+    [JsonPropertyName("error")]
+    public string? Error { get; set; }
 }

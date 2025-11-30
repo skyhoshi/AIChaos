@@ -44,9 +44,16 @@
             <div class="card">
                 <h2>📜 Command History</h2>
                 
-                <div class="form-group checkbox-group">
-                    <input type="checkbox" id="includeHistoryInAi" onchange="updatePreferences()">
-                    <label for="includeHistoryInAi" style="margin: 0;">Feed history to AI context</label>
+                <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 15px;">
+                    <div class="form-group checkbox-group" style="margin-bottom: 0;">
+                        <input type="checkbox" id="includeHistoryInAi" onchange="updatePreferences()">
+                        <label for="includeHistoryInAi" style="margin: 0;">Feed history to AI context</label>
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom: 0; display: flex; align-items: center; gap: 10px;">
+                        <label for="maxHistoryLength" style="margin: 0; white-space: nowrap;">Max History:</label>
+                        <input type="number" id="maxHistoryLength" min="10" max="500" value="50" style="width: 80px;" onchange="updatePreferences()">
+                    </div>
                 </div>
                 
                 <div class="btn-group" style="margin-bottom: 20px;">
@@ -136,6 +143,7 @@
                 
                 commandHistory = data.history;
                 document.getElementById('includeHistoryInAi').checked = data.preferences.includeHistoryInAi;
+                document.getElementById('maxHistoryLength').value = data.preferences.maxHistoryLength || 50;
                 
                 renderHistory();
             } catch (err) {
@@ -151,12 +159,23 @@
                 return;
             }
             
-            container.innerHTML = [...commandHistory].reverse().map(cmd => `
+            container.innerHTML = [...commandHistory].reverse().map(cmd => {
+                const statusBadge = getStatusBadge(cmd.status, cmd.errorMessage);
+                const errorDisplay = cmd.errorMessage ? 
+                    `<div class="error-message" style="color: #ff6b6b; background: rgba(255, 107, 107, 0.1); padding: 8px; border-radius: 4px; margin-top: 8px; font-size: 12px;">
+                        ⚠️ <strong>Error:</strong> ${escapeHtml(cmd.errorMessage)}
+                    </div>` : '';
+                
+                return `
                 <div class="history-item" style="flex-direction: column; align-items: stretch;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
-                            <div class="history-time">#${cmd.id} - ${new Date(cmd.timestamp).toLocaleString()}</div>
+                            <div class="history-time">
+                                #${cmd.id} - ${new Date(cmd.timestamp).toLocaleString()}
+                                ${statusBadge}
+                            </div>
                             <div class="history-prompt" style="margin-top: 5px;">${escapeHtml(cmd.userPrompt)}</div>
+                            ${errorDisplay}
                         </div>
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <span class="history-source ${cmd.source}">${cmd.source}</span>
@@ -179,7 +198,19 @@ ${escapeHtml(cmd.undoCode)}
                         </div>
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
+        }
+        
+        function getStatusBadge(status, errorMessage) {
+            const statusMap = {
+                0: { label: 'Pending', color: '#888' },
+                1: { label: 'Queued', color: '#f0ad4e' },
+                2: { label: 'Executed', color: '#5cb85c' },
+                3: { label: 'Undone', color: '#5bc0de' },
+                4: { label: 'Failed', color: '#d9534f' }
+            };
+            const s = statusMap[status] || { label: 'Unknown', color: '#888' };
+            return `<span style="background: ${s.color}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px;">${s.label}</span>`;
         }
         
         function toggleCode(id) {
@@ -231,12 +262,16 @@ ${escapeHtml(cmd.undoCode)}
         
         async function updatePreferences() {
             const includeHistory = document.getElementById('includeHistoryInAi').checked;
+            const maxHistoryLength = parseInt(document.getElementById('maxHistoryLength').value) || 50;
             
             try {
                 await fetch('/api/preferences', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ includeHistoryInAi: includeHistory })
+                    body: JSON.stringify({ 
+                        includeHistoryInAi: includeHistory,
+                        maxHistoryLength: maxHistoryLength
+                    })
                 });
             } catch (err) {
                 console.error('Failed to update preferences:', err);
