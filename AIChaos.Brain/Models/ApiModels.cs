@@ -22,6 +22,7 @@ public class CommandEntry
     public DateTime? ExecutedAt { get; set; }
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum CommandStatus
 {
     Pending,

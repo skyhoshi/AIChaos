@@ -120,22 +120,28 @@
                     return;
                 }
                 
-                container.innerHTML = recent.map(cmd => `
+                // Status enum mapping (handles both integer and string)
+                const statusNames = ['Pending', 'Queued', 'Executed', 'Undone', 'Failed'];
+                const getStatusName = (status) => typeof status === 'number' ? statusNames[status] || 'Unknown' : status;
+                
+                container.innerHTML = recent.map(cmd => {
+                    const statusName = getStatusName(cmd.status);
+                    return `
                     <div class="history-item">
                         <div style="flex: 1;">
                             <div class="history-time">${new Date(cmd.timestamp).toLocaleTimeString()}</div>
                             <div class="history-prompt">${escapeHtml(cmd.userPrompt)}</div>
                             ${cmd.aiResponse ? `<div class="history-response">💬 ${escapeHtml(cmd.aiResponse)}</div>` : ''}
-                            ${cmd.status === 'Failed' && cmd.errorMessage ? `<div class="history-error">⚠️ ${escapeHtml(cmd.errorMessage)}</div>` : ''}
+                            ${statusName === 'Failed' && cmd.errorMessage ? `<div class="history-error">⚠️ ${escapeHtml(cmd.errorMessage)}</div>` : ''}
                         </div>
                         <span class="history-source ${cmd.source}">${cmd.source}</span>
-                        <span class="history-status status-${cmd.status.toLowerCase()}">${cmd.status}</span>
+                        <span class="history-status status-${statusName.toLowerCase()}">${statusName}</span>
                         <div class="history-actions">
                             <button onclick="repeatCommand(${cmd.id})" class="btn-info btn-small">🔁</button>
                             <button onclick="undoCommand(${cmd.id})" class="btn-warning btn-small">↩</button>
                         </div>
                     </div>
-                `).join('');
+                `}).join('');
             } catch (err) {
                 console.error('Failed to load recent commands:', err);
             }
