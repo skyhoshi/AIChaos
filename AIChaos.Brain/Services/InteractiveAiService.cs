@@ -295,9 +295,12 @@ public class InteractiveAiService
             foreach (var step in session.Steps.TakeLast(3))
             {
                 userContent.AppendLine($"- Step {step.StepNumber} ({step.Phase}): {(step.Success == true ? "Success" : step.Success == false ? $"Failed: {step.Error}" : "Pending")}");
-                if (!string.IsNullOrEmpty(step.ResultData))
+                if (!string.IsNullOrEmpty(step.ResultData) && step.ResultData.Length > 0)
                 {
-                    userContent.AppendLine($"  Data: {step.ResultData.Substring(0, Math.Min(500, step.ResultData.Length))}");
+                    var truncatedData = step.ResultData.Length > 500 
+                        ? step.ResultData.Substring(0, 500) + "..." 
+                        : step.ResultData;
+                    userContent.AppendLine($"  Data: {truncatedData}");
                 }
             }
         }

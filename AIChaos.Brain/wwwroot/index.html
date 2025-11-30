@@ -71,6 +71,7 @@
         const userId = getUserId();
         let currentInteractiveSessionId = null;
         let interactivePollingInterval = null;
+        let currentMaxIterations = 5;
         
         function log(msg, type = 'normal') {
             const el = document.createElement('div');
@@ -138,6 +139,11 @@
             const statusContainer = document.getElementById('interactiveStatus');
             statusContainer.classList.remove('hidden');
             
+            // Track max iterations from response if available
+            if (data.maxIterations) {
+                currentMaxIterations = data.maxIterations;
+            }
+            
             if (data.status === 'in_progress') {
                 currentInteractiveSessionId = data.sessionId;
                 log(`🔄 Interactive session started: ${originalPrompt}`, 'info');
@@ -159,7 +165,7 @@
         
         function updateInteractiveUI(data) {
             document.querySelector('#interactivePhase .phase-badge').textContent = data.currentPhase || 'Unknown';
-            document.querySelector('#interactiveIteration span').textContent = `${data.iteration || 0}/${5}`;
+            document.querySelector('#interactiveIteration span').textContent = `${data.iteration || 0}/${currentMaxIterations}`;
             
             const stepsContainer = document.getElementById('interactiveSteps');
             if (data.steps && data.steps.length > 0) {

@@ -47,8 +47,9 @@ if SERVER then
     end
     
     -- Helper Function: Report execution result back to server (with optional captured data)
+    -- Note: commandId can be negative for interactive sessions, nil/0 is not valid
     local function ReportResult(commandId, success, errorMsg, resultData)
-        if not commandId then return end
+        if commandId == nil or commandId == 0 then return end
         
         local reportUrl = BASE_URL .. "/report"
         local body = {
