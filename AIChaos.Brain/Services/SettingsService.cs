@@ -188,4 +188,28 @@ public class SettingsService
     /// Checks if admin password is configured.
     /// </summary>
     public bool IsAdminConfigured => _settings.Admin.IsConfigured;
+    
+    /// <summary>
+    /// Updates safety settings.
+    /// </summary>
+    public void UpdateSafetySettings(SafetySettings safety)
+    {
+        lock (_lock)
+        {
+            _settings.Safety = safety;
+            SaveSettings();
+        }
+    }
+    
+    /// <summary>
+    /// Toggles Private Discord Mode on/off.
+    /// </summary>
+    public void SetPrivateDiscordMode(bool enabled)
+    {
+        lock (_lock)
+        {
+            _settings.Safety.PrivateDiscordMode = enabled;
+            SaveSettings();
+        }
+    }
 }

@@ -114,16 +114,21 @@ public class ChaosController : ControllerBase
             });
         }
         
-        // Check for changelevel attempts
-        var changeLevelKeywords = new[] { "changelevel", "change level", "next map", "load map", "switch map", "new map" };
-        if (changeLevelKeywords.Any(k => request.Prompt.Contains(k, StringComparison.OrdinalIgnoreCase)))
+        var isPrivateDiscordMode = _settingsService.Settings.Safety.PrivateDiscordMode;
+        
+        // Check for changelevel attempts (skip if Private Discord Mode is enabled)
+        if (!isPrivateDiscordMode)
         {
-            _logger.LogWarning("[SAFETY] Blocked changelevel attempt: {Prompt}", request.Prompt);
-            return Ok(new TriggerResponse
+            var changeLevelKeywords = new[] { "changelevel", "change level", "next map", "load map", "switch map", "new map" };
+            if (changeLevelKeywords.Any(k => request.Prompt.Contains(k, StringComparison.OrdinalIgnoreCase)))
             {
-                Status = "ignored",
-                Message = "Map/level changing is blocked for safety."
-            });
+                _logger.LogWarning("[SAFETY] Blocked changelevel attempt: {Prompt}", request.Prompt);
+                return Ok(new TriggerResponse
+                {
+                    Status = "ignored",
+                    Message = "Map/level changing is blocked for safety."
+                });
+            }
         }
         
         _logger.LogInformation("Generating code for: {Prompt}", request.Prompt);
@@ -131,18 +136,21 @@ public class ChaosController : ControllerBase
         // Generate code
         var (executionCode, undoCode) = await _codeGenerator.GenerateCodeAsync(request.Prompt);
         
-        // Post-generation safety check
-        var dangerousPatterns = new[] { "changelevel", "RunConsoleCommand.*\"map\"", "game.ConsoleCommand.*map" };
-        if (dangerousPatterns.Any(p => 
-            System.Text.RegularExpressions.Regex.IsMatch(executionCode, p, 
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase)))
+        // Post-generation safety check (skip if Private Discord Mode is enabled)
+        if (!isPrivateDiscordMode)
         {
-            _logger.LogWarning("[SAFETY] AI tried to generate changelevel code - blocking!");
-            return Ok(new TriggerResponse
+            var dangerousPatterns = new[] { "changelevel", "RunConsoleCommand.*\"map\"", "game.ConsoleCommand.*map" };
+            if (dangerousPatterns.Any(p => 
+                System.Text.RegularExpressions.Regex.IsMatch(executionCode, p, 
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase)))
             {
-                Status = "ignored",
-                Message = "Generated code attempted to change map (blocked)."
-            });
+                _logger.LogWarning("[SAFETY] AI tried to generate changelevel code - blocking!");
+                return Ok(new TriggerResponse
+                {
+                    Status = "ignored",
+                    Message = "Generated code attempted to change map (blocked)."
+                });
+            }
         }
         
         // Add to queue and history

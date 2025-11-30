@@ -69,6 +69,21 @@
                 <button onclick="changePassword()" class="btn-secondary">🔄 Change Password</button>
             </div>
             
+            <!-- Private Discord Mode -->
+            <div class="card">
+                <h2>
+                    🔓 Private Discord Mode
+                    <span id="privateDiscordModeStatus" class="status-badge status-disconnected">Disabled</span>
+                </h2>
+                <div class="alert alert-danger" style="margin-bottom: 15px;">
+                    <strong>⚠️ WARNING:</strong> When enabled, this mode disables ALL safety filters and restrictions in the AI prompt. The AI will execute any request without limitations. Only enable this for private/trusted sessions!
+                </div>
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="privateDiscordModeToggle" onchange="togglePrivateDiscordMode()">
+                    <label for="privateDiscordModeToggle" style="margin: 0; font-weight: bold;">Enable Private Discord Mode (No Filters)</label>
+                </div>
+            </div>
+            
             <!-- OpenRouter API -->
             <div class="card">
                 <h2>
@@ -395,6 +410,62 @@
             loadSetupStatus();
             loadModels();
             loadOpenRouterSettings();
+            loadPrivateDiscordMode();
+        }
+        
+        async function loadPrivateDiscordMode() {
+            try {
+                const response = await fetch('/api/setup/private-discord-mode');
+                const data = await response.json();
+                
+                const toggle = document.getElementById('privateDiscordModeToggle');
+                const status = document.getElementById('privateDiscordModeStatus');
+                
+                toggle.checked = data.enabled;
+                if (data.enabled) {
+                    status.textContent = 'Enabled';
+                    status.className = 'status-badge status-connected';
+                } else {
+                    status.textContent = 'Disabled';
+                    status.className = 'status-badge status-disconnected';
+                }
+            } catch (err) {
+                console.error('Failed to load Private Discord Mode setting:', err);
+            }
+        }
+        
+        async function togglePrivateDiscordMode() {
+            const toggle = document.getElementById('privateDiscordModeToggle');
+            const enabled = toggle.checked;
+            
+            try {
+                const response = await fetch('/api/setup/private-discord-mode', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const status = document.getElementById('privateDiscordModeStatus');
+                    if (data.enabled) {
+                        status.textContent = 'Enabled';
+                        status.className = 'status-badge status-connected';
+                        showAlert('Private Discord Mode enabled - ALL safety filters disabled!', 'warning');
+                    } else {
+                        status.textContent = 'Disabled';
+                        status.className = 'status-badge status-disconnected';
+                        showAlert('Private Discord Mode disabled - safety filters active', 'success');
+                    }
+                } else {
+                    toggle.checked = !enabled; // Revert on failure
+                    showAlert(data.message || 'Failed to update setting', 'error');
+                }
+            } catch (err) {
+                toggle.checked = !enabled; // Revert on failure
+                showAlert('Network error', 'error');
+            }
         }
         
         async function loadOpenRouterSettings() {

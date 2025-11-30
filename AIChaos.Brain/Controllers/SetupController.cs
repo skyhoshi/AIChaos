@@ -98,6 +98,37 @@ public class SetupController : ControllerBase
     }
     
     // ==========================================
+    // PRIVATE DISCORD MODE
+    // ==========================================
+    
+    /// <summary>
+    /// Get Private Discord Mode status.
+    /// </summary>
+    [HttpGet("private-discord-mode")]
+    public ActionResult GetPrivateDiscordMode()
+    {
+        return Ok(new { 
+            enabled = _settingsService.Settings.Safety.PrivateDiscordMode 
+        });
+    }
+    
+    /// <summary>
+    /// Set Private Discord Mode (disables all safety filters in prompt).
+    /// </summary>
+    [HttpPost("private-discord-mode")]
+    public ActionResult SetPrivateDiscordMode([FromBody] PrivateDiscordModeRequest request)
+    {
+        _settingsService.SetPrivateDiscordMode(request.Enabled);
+        _logger.LogInformation("Private Discord Mode set to: {Enabled}", request.Enabled);
+        
+        return Ok(new { 
+            status = "success", 
+            message = request.Enabled ? "Private Discord Mode enabled - all safety filters disabled" : "Private Discord Mode disabled",
+            enabled = request.Enabled
+        });
+    }
+    
+    // ==========================================
     // TUNNEL MANAGEMENT
     // ==========================================
     
@@ -603,4 +634,9 @@ public class SetPasswordRequest
 {
     public string? CurrentPassword { get; set; }
     public string NewPassword { get; set; } = "";
+}
+
+public class PrivateDiscordModeRequest
+{
+    public bool Enabled { get; set; } = false;
 }
