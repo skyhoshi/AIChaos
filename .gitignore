@@ -1,2 +1,39 @@
+# API Keys and Secrets
 sightengine_keys.txt
 openrouter_api_key.txt
+settings.json
+
+# Saved Payloads (user data)
+saved_payloads/
+
+# .NET build artifacts
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+.env
+
+# Logs
+*.log
+logs/
+tunnel_url.txt

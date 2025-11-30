@@ -5,6 +5,7 @@ if SERVER then
 
     -- Try to read URL from data file, fallback to hardcoded URL
                 local SERVER_URL = "https://aichaos-apigfg00.loca.lt/poll" -- Auto-configured by launcher
+    local BASE_URL = "https://aichaos-apigfg00.loca.lt" -- Base URL for reporting
     local POLL_INTERVAL = 2 -- Seconds to wait between requests
     
     -- Attempt to read URL from data file (created by launcher)
@@ -18,6 +19,7 @@ if SERVER then
             if content and content ~= "" then
                 -- Trim whitespace and add /poll endpoint
                 content = string.Trim(content)
+                BASE_URL = content
                 SERVER_URL = content .. "/poll"
                 print("[AI Chaos] Loaded URL from config: " .. SERVER_URL)
                 foundUrl = true
@@ -43,9 +45,39 @@ if SERVER then
         net.WriteString(codeString)
         net.Broadcast()
     end
+    
+    -- Helper Function: Report execution result back to server
+    local function ReportResult(commandId, success, errorMsg)
+        if not commandId or commandId <= 0 then return end
+        
+        local reportUrl = BASE_URL .. "/report"
+        local body = {
+            command_id = commandId,
+            success = success,
+            error = errorMsg
+        }
+        
+        HTTP({
+            method = "POST",
+            url = reportUrl,
+            body = util.TableToJSON(body),
+            headers = { 
+                ["Content-Type"] = "application/json",
+                ["ngrok-skip-browser-warning"] = "true"
+            },
+            success = function(code, body, headers)
+                if code == 200 then
+                    print("[AI Chaos] Result reported for command #" .. tostring(commandId))
+                end
+            end,
+            failed = function(err)
+                print("[AI Chaos] Failed to report result: " .. tostring(err))
+            end
+        })
+    end
 
     -- 2. Helper Function: Run the code safely
-    local function ExecuteAICode(code)
+    local function ExecuteAICode(code, commandId)
         print("[AI Chaos] Running generated code...")
         local success, err = pcall(function()
             -- Print whole code for debugging
@@ -55,9 +87,11 @@ if SERVER then
 
         if success then
             --PrintMessage(HUD_PRINTTALK, "[AI] Event triggered!")
+            ReportResult(commandId, true, nil)
         else
             PrintMessage(HUD_PRINTTALK, "[AI] Code Error: " .. tostring(err))
             print("[AI Error]", err)
+            ReportResult(commandId, false, tostring(err))
         end
     end
 
@@ -74,7 +108,10 @@ if SERVER then
             method = "POST",
             url = SERVER_URL,
             body = util.TableToJSON(body),
-            headers = { ["Content-Type"] = "application/json" },
+            headers = { 
+                ["Content-Type"] = "application/json",
+                ["ngrok-skip-browser-warning"] = "true"
+            },
             
             -- ON SUCCESS
             success = function(code, body, headers)
@@ -82,7 +119,7 @@ if SERVER then
                     local data = util.JSONToTable(body)
                     if data and data.has_code then
                         print("[AI Chaos] Received code!")
-                        ExecuteAICode(data.code)
+                        ExecuteAICode(data.code, data.command_id)
                     end
                 else
                     print("[AI Chaos] Server Error Code: " .. tostring(code))
