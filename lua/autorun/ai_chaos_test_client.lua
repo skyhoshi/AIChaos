@@ -85,30 +85,38 @@ if SERVER then
         end
 
         -- Helper Function: Run the code safely and capture any errors
-        -- Uses RunString with handleError=false to properly capture error messages
+        -- Uses CompileString + pcall to properly capture both syntax and runtime error messages
         local function ExecuteTestCode(code, commandId, cleanupAfterTest)
             print("[AI Chaos Test] Testing generated code...")
             print("[AI Chaos Test] Executing code:\n" .. code)
             
-            -- RunString returns error string when handleError is false
-            local result = RunString(code, "AI_Chaos_Test_" .. tostring(commandId), false)
+            local chunkName = "AI_Chaos_Test_" .. tostring(commandId)
             
-            -- If result is nil or empty string, execution was successful
-            -- If result is a non-empty string, it contains the error message
-            -- Note: RunString can return false (boolean) in some error cases
-            local success = (result == nil or result == "")
+            -- Step 1: Try to compile the code first (catches syntax errors)
+            -- CompileString returns error string if compilation fails, or a function if successful
+            local compiled = CompileString(code, chunkName, false)
+            
+            local success = false
             local errorMsg = nil
             
-            if not success then
-                if result == false then
-                    errorMsg = "Code execution failed (compilation or runtime error)"
-                elseif result == true then
-                    errorMsg = "Unexpected boolean return from RunString"
-                elseif type(result) == "string" then
-                    errorMsg = result
+            if type(compiled) == "string" then
+                -- Compilation failed - compiled contains the error message
+                errorMsg = compiled
+            elseif type(compiled) == "function" then
+                -- Compilation succeeded - now execute with pcall to catch runtime errors
+                local ok, runtimeErr = pcall(compiled)
+                if ok then
+                    success = true
                 else
-                    errorMsg = "Unknown error: " .. tostring(result)
+                    -- Runtime error - runtimeErr contains the actual error message
+                    errorMsg = tostring(runtimeErr)
                 end
+            else
+                -- Unexpected return type from CompileString
+                errorMsg = "Unexpected CompileString return type: " .. type(compiled)
+            end
+            
+            if not success then
                 print("[AI Chaos Test] ✗ Code Error: " .. errorMsg)
             else
                 print("[AI Chaos Test] ✓ Code executed successfully!")

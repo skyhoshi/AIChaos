@@ -89,7 +89,8 @@ if SERVER then
         })
     end
 
-    -- 2. Helper Function: Run the code safely using RunString with handleError=false
+    -- 2. Helper Function: Run the code safely using CompileString + pcall for proper error messages
+    -- This approach captures both syntax errors (from CompileString) and runtime errors (from pcall)
     local function ExecuteAICode(code, commandId)
         print("[AI Chaos] Running generated code...")
         
@@ -99,32 +100,40 @@ if SERVER then
         -- Print whole code for debugging
         print("[AI Chaos] Executing code:\n" .. code)
         
-        -- RunString returns error string when handleError is false
-        local result = RunString(code, "AI_Chaos_" .. tostring(commandId or 0), false)
+        local chunkName = "AI_Chaos_" .. tostring(commandId or 0)
+        
+        -- Step 1: Try to compile the code first (catches syntax errors)
+        -- CompileString returns error string if compilation fails, or a function if successful
+        local compiled = CompileString(code, chunkName, false)
+        
+        local success = false
+        local errorMsg = nil
+        
+        if type(compiled) == "string" then
+            -- Compilation failed - compiled contains the error message
+            errorMsg = compiled
+        elseif type(compiled) == "function" then
+            -- Compilation succeeded - now execute with pcall to catch runtime errors
+            local ok, runtimeErr = pcall(compiled)
+            if ok then
+                success = true
+            else
+                -- Runtime error - runtimeErr contains the actual error message
+                errorMsg = tostring(runtimeErr)
+            end
+        else
+            -- Unexpected return type from CompileString
+            errorMsg = "Unexpected CompileString return type: " .. type(compiled)
+        end
         
         -- Get captured data if any (used by interactive mode)
         local capturedData = _AI_CAPTURED_DATA
         _AI_CAPTURED_DATA = nil
         
-        -- If result is nil or empty string, execution was successful
-        -- If result is a non-empty string, it contains the error message
-        -- Note: RunString can return false (boolean) in some error cases
-        local success = (result == nil or result == "")
-        
         if success then
             --PrintMessage(HUD_PRINTTALK, "[AI] Event triggered!")
             ReportResult(commandId, true, nil, capturedData)
         else
-            local errorMsg
-            if result == false then
-                errorMsg = "Code execution failed (compilation or runtime error)"
-            elseif result == true then
-                errorMsg = "Unexpected boolean return from RunString"
-            elseif type(result) == "string" then
-                errorMsg = result
-            else
-                errorMsg = "Unknown error: " .. tostring(result)
-            end
             PrintMessage(HUD_PRINTTALK, "[AI] Code Error: " .. errorMsg)
             print("[AI Error]", errorMsg)
             ReportResult(commandId, false, errorMsg, capturedData)
