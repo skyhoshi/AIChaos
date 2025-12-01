@@ -4,8 +4,8 @@ if SERVER then
     util.AddNetworkString("AI_RunClientCode")
 
     -- Try to read URL from data file, fallback to hardcoded URL
-                local SERVER_URL = "https://aichaos-apigfg00.loca.lt/poll" -- Auto-configured by launcher
-    local BASE_URL = "https://aichaos-apigfg00.loca.lt" -- Base URL for reporting
+    local SERVER_URL = "https://voluntarily-paterfamiliar-jeanie.ngrok-free.dev/poll" -- Auto-configured by launcher
+    local BASE_URL = "https://voluntarily-paterfamiliar-jeanie.ngrok-free.dev" -- Base URL for reporting
     local POLL_INTERVAL = 2 -- Seconds to wait between requests
     
     -- Attempt to read URL from data file (created by launcher)
