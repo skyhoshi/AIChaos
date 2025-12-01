@@ -85,21 +85,27 @@ if SERVER then
         end
 
         -- Helper Function: Run the code safely and capture any errors
+        -- Uses RunString with handleError=false to properly capture error messages
         local function ExecuteTestCode(code, commandId, cleanupAfterTest)
             print("[AI Chaos Test] Testing generated code...")
+            print("[AI Chaos Test] Executing code:\n" .. code)
             
-            local success, err = pcall(function()
-                print("[AI Chaos Test] Executing code:\n" .. code)
-                RunString(code)
-            end)
-
-            if success then
-                print("[AI Chaos Test] ✓ Code executed successfully!")
-                ReportTestResult(commandId, true, nil)
+            -- RunString returns error string when handleError is false
+            local result = RunString(code, "AI_Chaos_Test_" .. tostring(commandId), false)
+            
+            -- If result is nil or empty string, execution was successful
+            -- If result is a non-empty string, it contains the error message
+            local success = (result == nil or result == "")
+            local errorMsg = nil
+            
+            if not success then
+                errorMsg = tostring(result)
+                print("[AI Chaos Test] ✗ Code Error: " .. errorMsg)
             else
-                print("[AI Chaos Test] ✗ Code Error: " .. tostring(err))
-                ReportTestResult(commandId, false, tostring(err))
+                print("[AI Chaos Test] ✓ Code executed successfully!")
             end
+            
+            ReportTestResult(commandId, success, errorMsg)
             
             -- Cleanup after test if requested
             if cleanupAfterTest then

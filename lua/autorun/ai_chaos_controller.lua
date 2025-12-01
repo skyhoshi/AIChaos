@@ -75,30 +75,35 @@ if SERVER then
         })
     end
 
-    -- 2. Helper Function: Run the code safely
+    -- 2. Helper Function: Run the code safely using RunString with handleError=false
     local function ExecuteAICode(code, commandId)
         print("[AI Chaos] Running generated code...")
         
         -- Clear any previous captured data
         _AI_CAPTURED_DATA = nil
         
-        local success, err = pcall(function()
-            -- Print whole code for debugging
-            print("[AI Chaos] Executing code:\n" .. code)
-            RunString(code)
-        end)
-
+        -- Print whole code for debugging
+        print("[AI Chaos] Executing code:\n" .. code)
+        
+        -- RunString returns error string when handleError is false
+        local result = RunString(code, "AI_Chaos_" .. tostring(commandId or 0), false)
+        
         -- Get captured data if any (used by interactive mode)
         local capturedData = _AI_CAPTURED_DATA
         _AI_CAPTURED_DATA = nil
-
+        
+        -- If result is nil or empty string, execution was successful
+        -- If result is a non-empty string, it contains the error message
+        local success = (result == nil or result == "")
+        
         if success then
             --PrintMessage(HUD_PRINTTALK, "[AI] Event triggered!")
             ReportResult(commandId, true, nil, capturedData)
         else
-            PrintMessage(HUD_PRINTTALK, "[AI] Code Error: " .. tostring(err))
-            print("[AI Error]", err)
-            ReportResult(commandId, false, tostring(err), capturedData)
+            local errorMsg = tostring(result)
+            PrintMessage(HUD_PRINTTALK, "[AI] Code Error: " .. errorMsg)
+            print("[AI Error]", errorMsg)
+            ReportResult(commandId, false, errorMsg, capturedData)
         end
     end
 

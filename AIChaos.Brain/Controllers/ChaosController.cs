@@ -16,6 +16,7 @@ public class ChaosController : ControllerBase
     private readonly InteractiveAiService _interactiveAi;
     private readonly SettingsService _settingsService;
     private readonly TestClientService _testClientService;
+    private readonly AgenticGameService _agenticService;
     private readonly ILogger<ChaosController> _logger;
     
     public ChaosController(
@@ -24,6 +25,7 @@ public class ChaosController : ControllerBase
         InteractiveAiService interactiveAi,
         SettingsService settingsService,
         TestClientService testClientService,
+        AgenticGameService agenticService,
         ILogger<ChaosController> logger)
     {
         _commandQueue = commandQueue;
@@ -31,6 +33,7 @@ public class ChaosController : ControllerBase
         _interactiveAi = interactiveAi;
         _settingsService = settingsService;
         _testClientService = testClientService;
+        _agenticService = agenticService;
         _logger = logger;
     }
     
@@ -598,5 +601,129 @@ public class ChaosController : ControllerBase
                 createdAt = s.CreatedAt
             })
         });
+    }
+    
+    // ==========================================
+    // UNIFIED AGENTIC GAME SERVICE ENDPOINTS
+    // ==========================================
+    
+    /// <summary>
+    /// Triggers an agentic AI session that can iterate with the game.
+    /// Supports both main client and test client modes.
+    /// </summary>
+    [HttpPost("trigger/agent")]
+    public async Task<ActionResult<AgentSessionResponse>> TriggerAgentSession([FromBody] AgentSessionRequest request)
+    {
+        if (string.IsNullOrEmpty(request.Prompt))
+        {
+            return BadRequest(new AgentSessionResponse
+            {
+                Status = "error",
+                Message = "No prompt provided"
+            });
+        }
+        
+        _logger.LogInformation("[AGENT] Starting agentic session for: {Prompt} (UseTestClient: {UseTestClient})", 
+            request.Prompt, request.UseTestClient);
+        
+        var session = await _agenticService.CreateSessionAsync(request);
+        
+        return Ok(new AgentSessionResponse
+        {
+            Status = session.IsComplete ? (session.WasSuccessful ? "complete" : "failed") : "in_progress",
+            Message = session.IsComplete 
+                ? (session.WasSuccessful ? "Session completed successfully" : "Session failed") 
+                : "Session started - waiting for game response",
+            SessionId = session.Id,
+            Mode = session.Mode.ToString(),
+            Iteration = session.CurrentIteration,
+            CurrentPhase = session.CurrentPhase.ToString(),
+            IsComplete = session.IsComplete,
+            FinalCode = session.FinalExecutionCode,
+            Steps = session.Steps.Select(s => new AgentStepResponse
+            {
+                StepNumber = s.StepNumber,
+                Phase = s.Phase,
+                Code = s.Code,
+                Success = s.Success,
+                Error = s.Error,
+                ResultData = s.ResultData,
+                AiThinking = s.AiThinking
+            }).ToList()
+        });
+    }
+    
+    /// <summary>
+    /// Gets the status of an agentic session.
+    /// </summary>
+    [HttpGet("api/agent/{sessionId}")]
+    public ActionResult<AgentSessionResponse> GetAgentSession(int sessionId)
+    {
+        var session = _agenticService.GetSession(sessionId);
+        
+        if (session == null)
+        {
+            return NotFound(new AgentSessionResponse
+            {
+                Status = "error",
+                Message = "Session not found"
+            });
+        }
+        
+        return Ok(new AgentSessionResponse
+        {
+            Status = session.IsComplete ? (session.WasSuccessful ? "complete" : "failed") : "in_progress",
+            SessionId = session.Id,
+            Mode = session.Mode.ToString(),
+            Iteration = session.CurrentIteration,
+            CurrentPhase = session.CurrentPhase.ToString(),
+            IsComplete = session.IsComplete,
+            FinalCode = session.FinalExecutionCode,
+            Steps = session.Steps.Select(s => new AgentStepResponse
+            {
+                StepNumber = s.StepNumber,
+                Phase = s.Phase,
+                Code = s.Code,
+                Success = s.Success,
+                Error = s.Error,
+                ResultData = s.ResultData,
+                AiThinking = s.AiThinking
+            }).ToList()
+        });
+    }
+    
+    /// <summary>
+    /// Gets all active agentic sessions.
+    /// </summary>
+    [HttpGet("api/agent/active")]
+    public ActionResult<object> GetActiveAgentSessions()
+    {
+        var sessions = _agenticService.GetActiveSessions();
+        
+        return Ok(new
+        {
+            count = sessions.Count,
+            testClientConnected = _agenticService.IsTestClientConnected,
+            testClientEnabled = _agenticService.IsTestClientEnabled,
+            sessions = sessions.Select(s => new
+            {
+                sessionId = s.Id,
+                prompt = s.UserPrompt,
+                mode = s.Mode.ToString(),
+                phase = s.CurrentPhase.ToString(),
+                iteration = s.CurrentIteration,
+                maxIterations = s.MaxIterations,
+                createdAt = s.CreatedAt
+            })
+        });
+    }
+    
+    /// <summary>
+    /// Gets the test queue status from the agentic service.
+    /// </summary>
+    [HttpGet("api/agent/queue")]
+    public ActionResult<TestQueueStatus> GetAgentQueueStatus()
+    {
+        return Ok(_agenticService.GetQueueStatus());
     }
 }

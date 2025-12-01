@@ -21,6 +21,7 @@ builder.Services.AddSingleton<TwitchService>();
 builder.Services.AddSingleton<YouTubeService>();
 builder.Services.AddSingleton<TunnelService>();
 builder.Services.AddSingleton<TestClientService>();
+builder.Services.AddSingleton<AgenticGameService>();
 
 // Configure CORS for local development
 builder.Services.AddCors(options =>
