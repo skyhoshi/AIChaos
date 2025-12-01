@@ -21,10 +21,6 @@ public class SettingsService
         _settingsPath = Path.Combine(AppContext.BaseDirectory, "settings.json");
         _settings = LoadSettings();
         _moderationPassword = GenerateModPassword();
-        _logger.LogInformation("===========================================");
-        _logger.LogInformation("  MODERATION PASSWORD: {Password}", _moderationPassword);
-        _logger.LogInformation("  (This password changes each session)", _moderationPassword);
-        _logger.LogInformation("===========================================");
     }
     
     /// <summary>

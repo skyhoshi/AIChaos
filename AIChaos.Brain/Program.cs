@@ -20,6 +20,7 @@ builder.Services.AddSingleton<InteractiveAiService>();
 builder.Services.AddSingleton<TwitchService>();
 builder.Services.AddSingleton<YouTubeService>();
 builder.Services.AddSingleton<TunnelService>();
+builder.Services.AddSingleton<ImageModerationService>();
 
 // Configure CORS for local development
 builder.Services.AddCors(options =>
@@ -65,6 +66,9 @@ app.MapGet("/moderation", async context =>
 
 app.MapControllers();
 
+// Get the settings service to trigger initialization and show moderation password
+var settingsService = app.Services.GetRequiredService<SettingsService>();
+
 Console.WriteLine("========================================");
 Console.WriteLine("  AI Chaos Brain - C# Edition");
 Console.WriteLine("========================================");
@@ -72,6 +76,9 @@ Console.WriteLine($"  Control Panel: http://localhost:5000/");
 Console.WriteLine("  Setup: http://localhost:5000/setup");
 Console.WriteLine("  History: http://localhost:5000/history");
 Console.WriteLine("  Moderation: http://localhost:5000/moderation");
+Console.WriteLine("========================================");
+Console.WriteLine($"  MODERATION PASSWORD: {settingsService.ModerationPassword}");
+Console.WriteLine("  (Password changes each session)");
 Console.WriteLine("========================================");
 
 app.Run("http://0.0.0.0:5000");
