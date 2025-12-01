@@ -53,6 +53,7 @@ public class SafetySettings
     public bool BlockUrls { get; set; } = true;
     public List<string> AllowedDomains { get; set; } = new() { "i.imgur.com", "imgur.com" };
     public List<string> Moderators { get; set; } = new();
+    public bool PrivateDiscordMode { get; set; } = false;
 }
 
 public class AdminSettings
