@@ -46,7 +46,7 @@ public class AgenticGameService
         Only use preparation phases when you genuinely need to discover something (find specific models, check entity state, etc.)
         
         **INTERACTION PHASES:**
-        1. **PREPARE** (optional) - Run code to gather information (search models/textures/other assets, check entities, get player state)
+        1. **PREPARE** (optional) - Run code to gather information (search models/textures/other assets, check entities, get player state), note you cannot ask for user clarification.
         2. **GENERATE** - Generate the main execution code (can be done immediately if no prep needed)
         3. **FIX** - If execution fails, analyze errors and fix the code
         
