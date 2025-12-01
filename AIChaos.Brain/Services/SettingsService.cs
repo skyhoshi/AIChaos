@@ -243,4 +243,49 @@ public class SettingsService
             SaveSettings();
         }
     }
+    
+    /// <summary>
+    /// Updates test client settings.
+    /// </summary>
+    public void UpdateTestClient(TestClientSettings testClient)
+    {
+        lock (_lock)
+        {
+            _settings.TestClient = testClient;
+            SaveSettings();
+        }
+    }
+    
+    /// <summary>
+    /// Enables or disables test client mode.
+    /// </summary>
+    public void SetTestClientMode(bool enabled)
+    {
+        lock (_lock)
+        {
+            _settings.TestClient.Enabled = enabled;
+            SaveSettings();
+        }
+    }
+    
+    /// <summary>
+    /// Updates test client connection status.
+    /// </summary>
+    public void UpdateTestClientConnection(bool isConnected)
+    {
+        lock (_lock)
+        {
+            _settings.TestClient.IsConnected = isConnected;
+            if (isConnected)
+            {
+                _settings.TestClient.LastPollTime = DateTime.UtcNow;
+            }
+            // Don't save to disk - this is runtime state
+        }
+    }
+    
+    /// <summary>
+    /// Checks if test client mode is enabled.
+    /// </summary>
+    public bool IsTestClientModeEnabled => _settings.TestClient.Enabled;
 }

@@ -44,6 +44,15 @@
                 <div id="interactiveIteration">Iteration: <span>0/5</span></div>
                 <div id="interactiveSteps" style="margin-top: 10px;"></div>
             </div>
+            
+            <div id="testClientStatus" class="hidden" style="margin-top: 15px; padding: 15px; background: rgba(255,165,0,0.1); border-radius: 8px; position: relative;">
+                <button onclick="dismissTestClientStatus()" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 1px solid var(--text-dim); color: var(--text-dim); padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">✕ Dismiss</button>
+                <h4 style="margin: 0 0 10px 0;">🧪 Test Client <span id="testClientSessionStatus"></span></h4>
+                <div id="testClientPrompt" style="margin-bottom: 10px; color: var(--text-dim); font-size: 12px;"></div>
+                <div id="testClientPhase">Status: <span class="phase-badge">Queued for testing...</span></div>
+                <div id="testClientAttempt">Attempt: <span>0/3</span></div>
+                <div id="testClientSteps" style="margin-top: 10px;"></div>
+            </div>
         </div>
         
         <div class="card">
@@ -114,6 +123,9 @@
                             log(`💬 AI: ${data.aiResponse}`, 'info');
                         }
                         loadRecentCommands();
+                    } else if (data.status === 'testing') {
+                        // Test client mode - show test client UI
+                        handleTestClientResponse(data, text);
                     } else if (data.status === 'ignored') {
                         log(`✗ BLOCKED: ${data.message}`, 'error');
                     } else {
@@ -230,6 +242,212 @@
         
         function dismissInteractiveStatus() {
             document.getElementById('interactiveStatus').classList.add('hidden');
+        }
+        
+        // Test Client Mode handling
+        let testClientPollingInterval = null;
+        let currentTestCommandId = null;
+        let testClientSteps = [];
+        
+        function handleTestClientResponse(data, originalPrompt) {
+            const statusContainer = document.getElementById('testClientStatus');
+            statusContainer.classList.remove('hidden');
+            
+            currentTestCommandId = data.commandId;
+            testClientSteps = [{
+                stepNumber: 1,
+                phase: 'Queued',
+                thinking: 'Code generated, sending to test client...',
+                success: null
+            }];
+            
+            log(`🧪 Testing: ${originalPrompt}`, 'info');
+            
+            document.getElementById('testClientPrompt').textContent = `"${originalPrompt}"`;
+            updateTestClientUI({
+                phase: 'Queued',
+                attempt: 0,
+                maxAttempts: 3,
+                steps: testClientSteps
+            });
+            
+            startTestClientPolling(data.commandId, originalPrompt);
+        }
+        
+        function updateTestClientUI(data) {
+            document.querySelector('#testClientPhase .phase-badge').textContent = data.phase || 'Unknown';
+            document.querySelector('#testClientAttempt span').textContent = `${data.attempt || 0}/${data.maxAttempts || 3}`;
+            
+            const sessionStatusEl = document.getElementById('testClientSessionStatus');
+            if (data.phase === 'Approved') {
+                sessionStatusEl.innerHTML = '<span style="color: var(--success); font-size: 12px;">✓ Approved</span>';
+            } else if (data.phase === 'Rejected') {
+                sessionStatusEl.innerHTML = '<span style="color: var(--error); font-size: 12px;">✗ Rejected</span>';
+            } else if (data.phase === 'Testing') {
+                sessionStatusEl.innerHTML = '<span style="color: var(--warning); font-size: 12px;">⏳ Testing</span>';
+            } else if (data.phase === 'Fixing') {
+                sessionStatusEl.innerHTML = '<span style="color: #ff9800; font-size: 12px;">🔧 AI Fixing</span>';
+            } else {
+                sessionStatusEl.innerHTML = '<span style="color: var(--text-dim); font-size: 12px;">⏳ Queued</span>';
+            }
+            
+            const stepsContainer = document.getElementById('testClientSteps');
+            if (data.steps && data.steps.length > 0) {
+                stepsContainer.innerHTML = data.steps.map(step => `
+                    <div class="test-step" style="margin: 5px 0; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 12px;">
+                        <div><strong>Step ${step.stepNumber}:</strong> ${step.phase}</div>
+                        ${step.thinking ? `<div style="color: var(--text-dim);">💭 ${escapeHtml(step.thinking.substring(0, 100))}${step.thinking.length > 100 ? '...' : ''}</div>` : ''}
+                        ${step.success === true ? '<span style="color: var(--success);">✓ Success</span>' : ''}
+                        ${step.success === false ? `<span style="color: var(--error);">✗ ${escapeHtml(step.error || 'Failed')}</span>` : ''}
+                    </div>
+                `).join('');
+            }
+        }
+        
+        function startTestClientPolling(commandId, originalPrompt) {
+            let pollCount = 0;
+            const maxPolls = 60; // 2 minutes max polling
+            
+            testClientPollingInterval = setInterval(async () => {
+                pollCount++;
+                if (pollCount > maxPolls) {
+                    finishTestClientSession('Timeout - test client not responding');
+                    return;
+                }
+                
+                try {
+                    // Check test queue status
+                    const response = await fetch('/api/test-client/status');
+                    const data = await response.json();
+                    
+                    // Find our command in the status
+                    const isPending = data.pendingCount > 0;
+                    const isQueued = data.queuedCount > 0;
+                    const hasApproved = data.approvedCount > 0;
+                    
+                    if (!data.isConnected) {
+                        updateTestClientUI({
+                            phase: 'Waiting for test client...',
+                            attempt: testClientSteps.length,
+                            maxAttempts: 3,
+                            steps: testClientSteps
+                        });
+                        return;
+                    }
+                    
+                    if (isPending) {
+                        // Currently being tested
+                        if (testClientSteps[testClientSteps.length - 1]?.phase !== 'Testing') {
+                            testClientSteps.push({
+                                stepNumber: testClientSteps.length + 1,
+                                phase: 'Testing',
+                                thinking: 'Executing code on test client...',
+                                success: null
+                            });
+                        }
+                        updateTestClientUI({
+                            phase: 'Testing',
+                            attempt: testClientSteps.length,
+                            maxAttempts: 3,
+                            steps: testClientSteps
+                        });
+                    } else if (isQueued) {
+                        // Might be retrying with AI fix
+                        const lastStep = testClientSteps[testClientSteps.length - 1];
+                        if (lastStep && lastStep.phase === 'Testing' && lastStep.success === null) {
+                            lastStep.success = false;
+                            lastStep.error = 'Code error - AI is fixing...';
+                            testClientSteps.push({
+                                stepNumber: testClientSteps.length + 1,
+                                phase: 'AI Fixing',
+                                thinking: 'AI analyzing error and generating fix...',
+                                success: null
+                            });
+                        }
+                        updateTestClientUI({
+                            phase: 'Fixing',
+                            attempt: testClientSteps.length,
+                            maxAttempts: 3,
+                            steps: testClientSteps
+                        });
+                    } else if (!isPending && !isQueued) {
+                        // Command completed (either approved or rejected)
+                        // Check the history to see if our command was executed
+                        const historyResponse = await fetch('/api/history');
+                        const historyData = await historyResponse.json();
+                        const ourCommand = historyData.history.find(c => c.id === commandId);
+                        
+                        if (ourCommand) {
+                            const wasApproved = ourCommand.status === 'Queued' || ourCommand.status === 'Executed' || ourCommand.status === 2 || ourCommand.status === 1;
+                            const lastStep = testClientSteps[testClientSteps.length - 1];
+                            if (lastStep) {
+                                lastStep.success = wasApproved;
+                                if (!wasApproved) {
+                                    lastStep.error = 'All fix attempts failed';
+                                }
+                            }
+                            
+                            testClientSteps.push({
+                                stepNumber: testClientSteps.length + 1,
+                                phase: wasApproved ? 'Approved' : 'Rejected',
+                                thinking: wasApproved ? 'Code passed testing, sent to main client!' : 'Code failed all attempts, not sent to main client.',
+                                success: wasApproved
+                            });
+                            
+                            updateTestClientUI({
+                                phase: wasApproved ? 'Approved' : 'Rejected',
+                                attempt: testClientSteps.length,
+                                maxAttempts: 3,
+                                steps: testClientSteps
+                            });
+                            
+                            if (wasApproved) {
+                                log(`✓ Test passed! Code sent to main client.`, 'success');
+                            } else {
+                                log(`✗ Test failed. Code not sent to main client.`, 'error');
+                            }
+                            
+                            finishTestClientSession();
+                            loadRecentCommands();
+                        }
+                    }
+                } catch (err) {
+                    console.error('Error polling test client status:', err);
+                }
+            }, 2000);
+        }
+        
+        function finishTestClientSession(errorMessage) {
+            if (testClientPollingInterval) {
+                clearInterval(testClientPollingInterval);
+                testClientPollingInterval = null;
+            }
+            currentTestCommandId = null;
+            
+            if (errorMessage) {
+                log(`✗ ${errorMessage}`, 'error');
+                testClientSteps.push({
+                    stepNumber: testClientSteps.length + 1,
+                    phase: 'Error',
+                    thinking: errorMessage,
+                    success: false,
+                    error: errorMessage
+                });
+                updateTestClientUI({
+                    phase: 'Error',
+                    attempt: testClientSteps.length,
+                    maxAttempts: 3,
+                    steps: testClientSteps
+                });
+            }
+        }
+        
+        function dismissTestClientStatus() {
+            document.getElementById('testClientStatus').classList.add('hidden');
+            if (testClientPollingInterval) {
+                clearInterval(testClientPollingInterval);
+                testClientPollingInterval = null;
+            }
         }
         
         promptInput.addEventListener('keydown', (e) => {

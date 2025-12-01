@@ -13,29 +13,33 @@ public class ChaosController : ControllerBase
 {
     private readonly CommandQueueService _commandQueue;
     private readonly AiCodeGeneratorService _codeGenerator;
-    private readonly InteractiveAiService _interactiveAi;
     private readonly SettingsService _settingsService;
     private readonly ImageModerationService _moderationService;
+    private readonly TestClientService _testClientService;
+    private readonly AgenticGameService _agenticService;
     private readonly ILogger<ChaosController> _logger;
     
     public ChaosController(
         CommandQueueService commandQueue,
         AiCodeGeneratorService codeGenerator,
-        InteractiveAiService interactiveAi,
         SettingsService settingsService,
         ImageModerationService moderationService,
+        TestClientService testClientService,
+        AgenticGameService agenticService,
         ILogger<ChaosController> logger)
     {
         _commandQueue = commandQueue;
         _codeGenerator = codeGenerator;
-        _interactiveAi = interactiveAi;
         _settingsService = settingsService;
         _moderationService = moderationService;
+        _testClientService = testClientService;
+        _agenticService = agenticService;
         _logger = logger;
     }
     
     /// <summary>
     /// Polls for the next command in the queue (called by GMod).
+    /// If test client mode is enabled, only returns commands that passed testing.
     /// Supports both GET and POST for compatibility with various tunnel services.
     /// </summary>
     [HttpGet("poll")]
@@ -45,6 +49,37 @@ public class ChaosController : ControllerBase
         // Log incoming request for debugging
         _logger.LogDebug("Poll request received from {RemoteIp}", HttpContext.Connection.RemoteIpAddress);
         
+        // Check for timed out tests
+        _testClientService.CheckTimeouts();
+        
+        // Add ngrok bypass header in response
+        Response.Headers.Append("ngrok-skip-browser-warning", "true");
+        
+        // If test client mode is enabled, check for approved commands first
+        if (_testClientService.IsEnabled)
+        {
+            var approvedResult = _testClientService.PollApprovedCommand();
+            if (approvedResult.HasValue)
+            {
+                _logger.LogInformation("[MAIN CLIENT] Sending approved command #{CommandId}", approvedResult.Value.CommandId);
+                return new PollResponse
+                {
+                    HasCode = true,
+                    Code = approvedResult.Value.Code,
+                    CommandId = approvedResult.Value.CommandId
+                };
+            }
+            
+            // No approved commands, return empty
+            return new PollResponse
+            {
+                HasCode = false,
+                Code = null,
+                CommandId = null
+            };
+        }
+        
+        // Test client mode is disabled, use normal queue
         var result = _commandQueue.PollNextCommand();
         
         // Add ngrok bypass header in response (helps with some ngrok configurations)
@@ -74,10 +109,10 @@ public class ChaosController : ControllerBase
     [HttpPost("report")]
     public async Task<ActionResult<ApiResponse>> ReportResult([FromBody] ExecutionResultRequest request)
     {
-        // Check if this is an interactive session command (negative IDs)
+        // Check if this is an agentic session command (negative IDs)
         if (request.CommandId < 0)
         {
-            var handled = await _interactiveAi.ReportResultAsync(
+            var handled = await _agenticService.ReportResultAsync(
                 request.CommandId, 
                 request.Success, 
                 request.Error, 
@@ -85,11 +120,11 @@ public class ChaosController : ControllerBase
             
             if (handled)
             {
-                _logger.LogInformation("[INTERACTIVE] Reported result for command #{CommandId}", request.CommandId);
+                _logger.LogInformation("[AGENTIC] Reported result for command #{CommandId}", request.CommandId);
                 return Ok(new ApiResponse
                 {
                     Status = "success",
-                    Message = "Interactive result recorded",
+                    Message = "Agentic result recorded",
                     CommandId = request.CommandId
                 });
             }
@@ -100,8 +135,8 @@ public class ChaosController : ControllerBase
             return Ok(new ApiResponse { Status = "ignored", Message = "No command ID to report" });
         }
         
-        // Check if this is a regular command that's also part of an interactive session
-        var interactiveHandled = await _interactiveAi.ReportResultAsync(
+        // Check if this is a regular command that's also part of an agentic session
+        var agenticHandled = await _agenticService.ReportResultAsync(
             request.CommandId, 
             request.Success, 
             request.Error, 
@@ -130,6 +165,66 @@ public class ChaosController : ControllerBase
         {
             Status = "error",
             Message = "Command not found in history"
+        });
+    }
+    
+    /// <summary>
+    /// Polls for the next command to test (called by test client GMod instance).
+    /// </summary>
+    [HttpGet("poll/test")]
+    [HttpPost("poll/test")]
+    public ActionResult<TestPollResponse> PollTest()
+    {
+        _logger.LogDebug("Test client poll received from {RemoteIp}", HttpContext.Connection.RemoteIpAddress);
+        
+        Response.Headers.Append("ngrok-skip-browser-warning", "true");
+        
+        var result = _testClientService.PollTestCommand();
+        
+        if (result != null)
+        {
+            return Ok(result);
+        }
+        
+        // Return 204 No Content when there's nothing to test
+        return NoContent();
+    }
+    
+    /// <summary>
+    /// Reports test result from test client GMod instance.
+    /// If the test fails, AI will attempt to fix the code and retry.
+    /// </summary>
+    [HttpPost("report/test")]
+    public async Task<ActionResult<ApiResponse>> ReportTestResult([FromBody] TestResultRequest request)
+    {
+        var action = await _testClientService.ReportTestResultAsync(request.CommandId, request.Success, request.Error);
+        
+        string message = action switch
+        {
+            TestResultAction.Approved => "Test passed - command queued for main client",
+            TestResultAction.Rejected => "Test failed after max attempts - command will not be sent to main client",
+            TestResultAction.Retrying => "Test failed - AI is fixing the code and will retry",
+            _ => "Unknown command"
+        };
+        
+        if (action == TestResultAction.Approved)
+        {
+            _logger.LogInformation("[TEST CLIENT] Command #{CommandId} approved", request.CommandId);
+        }
+        else if (action == TestResultAction.Rejected)
+        {
+            _logger.LogWarning("[TEST CLIENT] Command #{CommandId} rejected after all attempts: {Error}", request.CommandId, request.Error);
+        }
+        else if (action == TestResultAction.Retrying)
+        {
+            _logger.LogInformation("[TEST CLIENT] Command #{CommandId} failed, AI is fixing and will retry", request.CommandId);
+        }
+        
+        return Ok(new ApiResponse
+        {
+            Status = action == TestResultAction.Unknown ? "error" : "success",
+            Message = message,
+            CommandId = request.CommandId
         });
     }
     
@@ -212,7 +307,10 @@ public class ChaosController : ControllerBase
             }
         }
         
-        // Add to queue and history
+        // Determine if we should queue for immediate execution or route through test client
+        var isTestClientModeEnabled = _testClientService.IsEnabled;
+        
+        // Add to history (queue for execution only if test client mode is disabled)
         var entry = _commandQueue.AddCommand(
             request.Prompt,
             executionCode,
@@ -220,11 +318,20 @@ public class ChaosController : ControllerBase
             request.Source ?? "web",
             request.Author ?? "anonymous",
             null,
-            request.UserId);
+            request.UserId,
+            null,
+            queueForExecution: !isTestClientModeEnabled);
+        
+        // If test client mode is enabled, queue for testing instead of direct execution
+        if (isTestClientModeEnabled)
+        {
+            _testClientService.QueueForTesting(entry.Id, executionCode, request.Prompt);
+            _logger.LogInformation("[TEST CLIENT] Command #{CommandId} queued for AI-driven testing", entry.Id);
+        }
         
         return Ok(new TriggerResponse
         {
-            Status = "queued",
+            Status = isTestClientModeEnabled ? "testing" : "queued",
             CodePreview = executionCode,
             HasUndo = true,
             CommandId = entry.Id,
@@ -437,6 +544,7 @@ public class ChaosController : ControllerBase
     
     /// <summary>
     /// Triggers an interactive AI session that can iterate with the game.
+    /// This is a legacy endpoint that now uses the unified AgenticGameService.
     /// </summary>
     [HttpPost("trigger/interactive")]
     public async Task<ActionResult<InteractiveSessionResponse>> TriggerInteractive([FromBody] InteractiveTriggerRequest request)
@@ -452,7 +560,16 @@ public class ChaosController : ControllerBase
         
         _logger.LogInformation("[INTERACTIVE] Starting interactive session for: {Prompt}", request.Prompt);
         
-        var session = await _interactiveAi.CreateSessionAsync(request);
+        // Convert to AgentSessionRequest and use AgenticGameService
+        var agentRequest = new AgentSessionRequest
+        {
+            Prompt = request.Prompt,
+            UserId = request.UserId,
+            MaxIterations = request.MaxIterations,
+            UseTestClient = false // Interactive mode uses main client
+        };
+        
+        var session = await _agenticService.CreateSessionAsync(agentRequest);
         
         return Ok(new InteractiveSessionResponse
         {
@@ -465,17 +582,27 @@ public class ChaosController : ControllerBase
             CurrentPhase = session.CurrentPhase.ToString(),
             IsComplete = session.IsComplete,
             FinalCode = session.FinalExecutionCode,
-            Steps = session.Steps
+            Steps = session.Steps.Select(s => new InteractionStep
+            {
+                StepNumber = s.StepNumber,
+                Phase = s.Phase,
+                Code = s.Code,
+                Success = s.Success,
+                Error = s.Error,
+                ResultData = s.ResultData,
+                AiThinking = s.AiThinking
+            }).ToList()
         });
     }
     
     /// <summary>
     /// Gets the status of an interactive session.
+    /// This is a legacy endpoint that now uses the unified AgenticGameService.
     /// </summary>
     [HttpGet("api/interactive/{sessionId}")]
     public ActionResult<InteractiveSessionResponse> GetInteractiveSession(int sessionId)
     {
-        var session = _interactiveAi.GetSession(sessionId);
+        var session = _agenticService.GetSession(sessionId);
         
         if (session == null)
         {
@@ -494,17 +621,27 @@ public class ChaosController : ControllerBase
             CurrentPhase = session.CurrentPhase.ToString(),
             IsComplete = session.IsComplete,
             FinalCode = session.FinalExecutionCode,
-            Steps = session.Steps
+            Steps = session.Steps.Select(s => new InteractionStep
+            {
+                StepNumber = s.StepNumber,
+                Phase = s.Phase,
+                Code = s.Code,
+                Success = s.Success,
+                Error = s.Error,
+                ResultData = s.ResultData,
+                AiThinking = s.AiThinking
+            }).ToList()
         });
     }
     
     /// <summary>
     /// Gets all active interactive sessions.
+    /// This is a legacy endpoint that now uses the unified AgenticGameService.
     /// </summary>
     [HttpGet("api/interactive/active")]
-    public ActionResult<object> GetActiveSessions()
+    public ActionResult<object> GetActiveInteractiveSessions()
     {
-        var sessions = _interactiveAi.GetActiveSessions();
+        var sessions = _agenticService.GetActiveSessions();
         
         return Ok(new
         {
@@ -519,5 +656,129 @@ public class ChaosController : ControllerBase
                 createdAt = s.CreatedAt
             })
         });
+    }
+    
+    // ==========================================
+    // UNIFIED AGENTIC GAME SERVICE ENDPOINTS
+    // ==========================================
+    
+    /// <summary>
+    /// Triggers an agentic AI session that can iterate with the game.
+    /// Supports both main client and test client modes.
+    /// </summary>
+    [HttpPost("trigger/agent")]
+    public async Task<ActionResult<AgentSessionResponse>> TriggerAgentSession([FromBody] AgentSessionRequest request)
+    {
+        if (string.IsNullOrEmpty(request.Prompt))
+        {
+            return BadRequest(new AgentSessionResponse
+            {
+                Status = "error",
+                Message = "No prompt provided"
+            });
+        }
+        
+        _logger.LogInformation("[AGENT] Starting agentic session for: {Prompt} (UseTestClient: {UseTestClient})", 
+            request.Prompt, request.UseTestClient);
+        
+        var session = await _agenticService.CreateSessionAsync(request);
+        
+        return Ok(new AgentSessionResponse
+        {
+            Status = session.IsComplete ? (session.WasSuccessful ? "complete" : "failed") : "in_progress",
+            Message = session.IsComplete 
+                ? (session.WasSuccessful ? "Session completed successfully" : "Session failed") 
+                : "Session started - waiting for game response",
+            SessionId = session.Id,
+            Mode = session.Mode.ToString(),
+            Iteration = session.CurrentIteration,
+            CurrentPhase = session.CurrentPhase.ToString(),
+            IsComplete = session.IsComplete,
+            FinalCode = session.FinalExecutionCode,
+            Steps = session.Steps.Select(s => new AgentStepResponse
+            {
+                StepNumber = s.StepNumber,
+                Phase = s.Phase,
+                Code = s.Code,
+                Success = s.Success,
+                Error = s.Error,
+                ResultData = s.ResultData,
+                AiThinking = s.AiThinking
+            }).ToList()
+        });
+    }
+    
+    /// <summary>
+    /// Gets the status of an agentic session.
+    /// </summary>
+    [HttpGet("api/agent/{sessionId}")]
+    public ActionResult<AgentSessionResponse> GetAgentSession(int sessionId)
+    {
+        var session = _agenticService.GetSession(sessionId);
+        
+        if (session == null)
+        {
+            return NotFound(new AgentSessionResponse
+            {
+                Status = "error",
+                Message = "Session not found"
+            });
+        }
+        
+        return Ok(new AgentSessionResponse
+        {
+            Status = session.IsComplete ? (session.WasSuccessful ? "complete" : "failed") : "in_progress",
+            SessionId = session.Id,
+            Mode = session.Mode.ToString(),
+            Iteration = session.CurrentIteration,
+            CurrentPhase = session.CurrentPhase.ToString(),
+            IsComplete = session.IsComplete,
+            FinalCode = session.FinalExecutionCode,
+            Steps = session.Steps.Select(s => new AgentStepResponse
+            {
+                StepNumber = s.StepNumber,
+                Phase = s.Phase,
+                Code = s.Code,
+                Success = s.Success,
+                Error = s.Error,
+                ResultData = s.ResultData,
+                AiThinking = s.AiThinking
+            }).ToList()
+        });
+    }
+    
+    /// <summary>
+    /// Gets all active agentic sessions.
+    /// </summary>
+    [HttpGet("api/agent/active")]
+    public ActionResult<object> GetActiveAgentSessions()
+    {
+        var sessions = _agenticService.GetActiveSessions();
+        
+        return Ok(new
+        {
+            count = sessions.Count,
+            testClientConnected = _agenticService.IsTestClientConnected,
+            testClientEnabled = _agenticService.IsTestClientEnabled,
+            sessions = sessions.Select(s => new
+            {
+                sessionId = s.Id,
+                prompt = s.UserPrompt,
+                mode = s.Mode.ToString(),
+                phase = s.CurrentPhase.ToString(),
+                iteration = s.CurrentIteration,
+                maxIterations = s.MaxIterations,
+                createdAt = s.CreatedAt
+            })
+        });
+    }
+    
+    /// <summary>
+    /// Gets the test queue status from the agentic service.
+    /// </summary>
+    [HttpGet("api/agent/queue")]
+    public ActionResult<TestQueueStatus> GetAgentQueueStatus()
+    {
+        return Ok(_agenticService.GetQueueStatus());
     }
 }

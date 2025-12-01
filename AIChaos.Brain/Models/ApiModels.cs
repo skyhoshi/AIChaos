@@ -156,6 +156,21 @@ public class SetupStatus
     public TwitchAuthState Twitch { get; set; } = new();
     public YouTubeAuthState YouTube { get; set; } = new();
     public TunnelState Tunnel { get; set; } = new();
+    public TestClientState TestClient { get; set; } = new();
+}
+
+/// <summary>
+/// Test client state for multirun mode.
+/// </summary>
+public class TestClientState
+{
+    public bool Enabled { get; set; }
+    public bool IsConnected { get; set; }
+    public string TestMap { get; set; } = "gm_flatgrass";
+    public bool CleanupAfterTest { get; set; } = true;
+    public int TimeoutSeconds { get; set; } = 10;
+    public string? GmodPath { get; set; }
+    public DateTime? LastPollTime { get; set; }
 }
 
 /// <summary>
@@ -336,4 +351,50 @@ public class ImageReviewRequest
 {
     public int ImageId { get; set; }
     public bool Approved { get; set; }
+}
+/// Request to report test result from test client.
+/// </summary>
+public class TestResultRequest
+{
+    [JsonPropertyName("command_id")]
+    public int CommandId { get; set; }
+    
+    [JsonPropertyName("success")]
+    public bool Success { get; set; }
+    
+    [JsonPropertyName("error")]
+    public string? Error { get; set; }
+    
+    [JsonPropertyName("is_test_client")]
+    public bool IsTestClient { get; set; }
+}
+
+/// <summary>
+/// Response for agentic session.
+/// </summary>
+public class AgentSessionResponse
+{
+    public string Status { get; set; } = "";
+    public string? Message { get; set; }
+    public int SessionId { get; set; }
+    public string? Mode { get; set; }
+    public int Iteration { get; set; }
+    public string? CurrentPhase { get; set; }
+    public bool IsComplete { get; set; }
+    public string? FinalCode { get; set; }
+    public List<AgentStepResponse> Steps { get; set; } = new();
+}
+
+/// <summary>
+/// Response for a single agent step.
+/// </summary>
+public class AgentStepResponse
+{
+    public int StepNumber { get; set; }
+    public string Phase { get; set; } = "";
+    public string? Code { get; set; }
+    public bool? Success { get; set; }
+    public string? Error { get; set; }
+    public string? ResultData { get; set; }
+    public string? AiThinking { get; set; }
 }

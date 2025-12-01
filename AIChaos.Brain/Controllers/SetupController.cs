@@ -270,6 +270,16 @@ public class SetupController : ControllerBase
                 Type = tunnelStatus.Type.ToString(),
                 Url = tunnelStatus.Url,
                 PublicIp = tunnelStatus.PublicIp
+            },
+            TestClient = new TestClientState
+            {
+                Enabled = settings.TestClient.Enabled,
+                IsConnected = settings.TestClient.IsConnected,
+                TestMap = settings.TestClient.TestMap,
+                CleanupAfterTest = settings.TestClient.CleanupAfterTest,
+                TimeoutSeconds = settings.TestClient.TimeoutSeconds,
+                GmodPath = settings.TestClient.GmodPath,
+                LastPollTime = settings.TestClient.LastPollTime
             }
         });
     }
@@ -283,9 +293,10 @@ public class SetupController : ControllerBase
         var models = new[]
         {
             new { id = "anthropic/claude-sonnet-4.5", name = "Claude Sonnet 4.5 (Recommended)", provider = "Anthropic" },
+            new { id = "anthropic/claude-haiku-4.5", name = "Claude Haiku 4.5", provider = "Anthropic" },
             new { id = "anthropic/claude-3.5-sonnet", name = "Claude 3.5 Sonnet", provider = "Anthropic" },
             new { id = "anthropic/claude-3-opus", name = "Claude 3 Opus", provider = "Anthropic" },
-            new { id = "openai/gpt-4o", name = "GPT-4o", provider = "OpenAI" },
+            new { id = "openai/gpt-5.1-codex-mini", name = "GPT-5.1 Codex Mini", provider = "OpenAI" },
             new { id = "openai/gpt-4-turbo", name = "GPT-4 Turbo", provider = "OpenAI" },
             new { id = "openai/gpt-4", name = "GPT-4", provider = "OpenAI" },
             new { id = "google/gemini-pro-1.5", name = "Gemini Pro 1.5", provider = "Google" },
@@ -640,6 +651,118 @@ public class SetupController : ControllerBase
         _youtubeService.StopListening();
         return Ok(new { status = "success", message = "Stopped listening to YouTube" });
     }
+    
+    // ==========================================
+    // TEST CLIENT MODE
+    // ==========================================
+    
+    /// <summary>
+    /// Get test client mode status.
+    /// </summary>
+    [HttpGet("test-client")]
+    public ActionResult GetTestClientStatus()
+    {
+        var settings = _settingsService.Settings.TestClient;
+        return Ok(new { 
+            enabled = settings.Enabled,
+            isConnected = settings.IsConnected,
+            testMap = settings.TestMap,
+            cleanupAfterTest = settings.CleanupAfterTest,
+            timeoutSeconds = settings.TimeoutSeconds,
+            gmodPath = settings.GmodPath,
+            lastPollTime = settings.LastPollTime
+        });
+    }
+    
+    /// <summary>
+    /// Enable or disable test client mode.
+    /// </summary>
+    [HttpPost("test-client/toggle")]
+    public ActionResult ToggleTestClientMode([FromBody] TestClientModeRequest request)
+    {
+        _settingsService.SetTestClientMode(request.Enabled);
+        _logger.LogInformation("Test Client Mode set to: {Enabled}", request.Enabled);
+        
+        return Ok(new { 
+            status = "success", 
+            message = request.Enabled ? "Test Client Mode enabled" : "Test Client Mode disabled",
+            enabled = request.Enabled
+        });
+    }
+    
+    /// <summary>
+    /// Update test client settings.
+    /// </summary>
+    [HttpPost("test-client/settings")]
+    public ActionResult UpdateTestClientSettings([FromBody] TestClientSettingsRequest request)
+    {
+        var existing = _settingsService.Settings.TestClient;
+        existing.TestMap = request.TestMap ?? existing.TestMap;
+        existing.CleanupAfterTest = request.CleanupAfterTest ?? existing.CleanupAfterTest;
+        existing.TimeoutSeconds = request.TimeoutSeconds ?? existing.TimeoutSeconds;
+        existing.GmodPath = request.GmodPath ?? existing.GmodPath;
+        
+        _settingsService.UpdateTestClient(existing);
+        _logger.LogInformation("Test Client settings updated");
+        
+        return Ok(new { status = "success", message = "Test Client settings saved" });
+    }
+    
+    /// <summary>
+    /// Launch a test client instance of GMod with -multirun.
+    /// </summary>
+    [HttpPost("test-client/launch")]
+    public ActionResult LaunchTestClient()
+    {
+        var settings = _settingsService.Settings.TestClient;
+        
+        if (string.IsNullOrEmpty(settings.GmodPath))
+        {
+            return BadRequest(new { status = "error", message = "GMod path not configured. Please set the path to your GMod executable." });
+        }
+        
+        if (!System.IO.File.Exists(settings.GmodPath))
+        {
+            return BadRequest(new { status = "error", message = $"GMod executable not found at: {settings.GmodPath}" });
+        }
+        
+        // Validate map name to prevent command injection
+        // Map names should only contain alphanumeric characters, underscores, and hyphens
+        var mapName = settings.TestMap;
+        if (string.IsNullOrEmpty(mapName))
+        {
+            mapName = "gm_flatgrass";
+        }
+        
+        if (!System.Text.RegularExpressions.Regex.IsMatch(mapName, @"^[a-zA-Z0-9_\-]+$"))
+        {
+            return BadRequest(new { status = "error", message = "Invalid map name. Map names can only contain letters, numbers, underscores, and hyphens." });
+        }
+        
+        try
+        {
+            var startInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = settings.GmodPath,
+                Arguments = $"-multirun -windowed -w 640 -h 480 +map {mapName} +ai_chaos_test_client 1",
+                UseShellExecute = true
+            };
+            
+            System.Diagnostics.Process.Start(startInfo);
+            _logger.LogInformation("Launched test client with map: {Map}", mapName);
+            
+            return Ok(new { 
+                status = "success", 
+                message = $"Test client launched with map {mapName}",
+                note = "The test client will connect automatically when the game loads."
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to launch test client");
+            return BadRequest(new { status = "error", message = $"Failed to launch test client: {ex.Message}" });
+        }
+    }
 }
 
 // Request models
@@ -662,4 +785,16 @@ public class PrivateDiscordModeRequest
 public class ModerationLoginRequest
 {
     public string Password { get; set; } = "";
+}
+public class TestClientModeRequest
+{
+    public bool Enabled { get; set; } = false;
+}
+
+public class TestClientSettingsRequest
+{
+    public string? TestMap { get; set; }
+    public bool? CleanupAfterTest { get; set; }
+    public int? TimeoutSeconds { get; set; }
+    public string? GmodPath { get; set; }
 }

@@ -16,11 +16,12 @@ builder.Services.Configure<AppSettings>(builder.Configuration.GetSection("AIChao
 builder.Services.AddSingleton<SettingsService>();
 builder.Services.AddSingleton<CommandQueueService>();
 builder.Services.AddSingleton<AiCodeGeneratorService>();
-builder.Services.AddSingleton<InteractiveAiService>();
 builder.Services.AddSingleton<TwitchService>();
 builder.Services.AddSingleton<YouTubeService>();
 builder.Services.AddSingleton<TunnelService>();
 builder.Services.AddSingleton<ImageModerationService>();
+builder.Services.AddSingleton<TestClientService>();
+builder.Services.AddSingleton<AgenticGameService>();
 
 // Configure CORS for local development
 builder.Services.AddCors(options =>

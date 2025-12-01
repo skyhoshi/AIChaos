@@ -314,6 +314,68 @@
                     <button onclick="stopYouTube()" id="youtubeStopBtn" class="btn-danger hidden">⏹️ Stop</button>
                 </div>
             </div>
+            
+            <!-- Test Client Mode -->
+            <div class="card">
+                <h2>
+                    🧪 AI-Driven Test Client Mode
+                    <span id="testClientStatus" class="status-badge status-disconnected">Disabled</span>
+                </h2>
+                <div class="alert alert-info" style="margin-bottom: 15px;">
+                    <strong>ℹ️ About AI-Driven Test Client Mode:</strong> Run GMod with <code>-multirun</code> to have a separate test client receive and execute commands first. If the code fails, an <strong>AI agent</strong> will automatically analyze the error and fix the code, retrying up to 3 times. Only working code is sent to your main player client. This protects your main game from seeing crashes or errors!
+                </div>
+                
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="testClientModeToggle" onchange="toggleTestClientMode()">
+                    <label for="testClientModeToggle" style="margin: 0; font-weight: bold;">Enable AI-Driven Test Client Mode</label>
+                </div>
+                
+                <div id="testClientSettings" class="hidden" style="margin-top: 15px;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Test Map</label>
+                            <input type="text" id="testClientMap" value="gm_flatgrass" placeholder="gm_flatgrass">
+                            <small>Small/fast-loading map for test client</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Timeout (seconds)</label>
+                            <input type="number" id="testClientTimeout" value="10" min="5" max="60">
+                            <small>How long to wait for test results</small>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" id="testClientCleanup" checked>
+                        <label for="testClientCleanup" style="margin: 0;">Run gmod_admin_cleanup after each test</label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>GMod Executable Path (for auto-launch)</label>
+                        <input type="text" id="testClientGmodPath" placeholder="C:\Program Files (x86)\Steam\steamapps\common\GarrysMod\gmod.exe">
+                        <small>Optional: Path to gmod.exe for launching test client automatically</small>
+                    </div>
+                    
+                    <div class="btn-group">
+                        <button onclick="saveTestClientSettings()" class="btn-secondary">💾 Save Settings</button>
+                        <button onclick="launchTestClient()" id="testClientLaunchBtn" class="btn-info">🚀 Launch Test Client</button>
+                    </div>
+                    
+                    <div id="testClientInfo" class="hidden" style="margin-top: 15px;">
+                        <div class="alert alert-success">
+                            <strong>✅ Test Client Connected!</strong>
+                            <div style="margin-top: 5px; font-size: 12px;">
+                                Last poll: <span id="testClientLastPoll">Never</span>
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px; padding: 10px; background: rgba(0,255,0,0.1); border-radius: 5px;">
+                            <strong>🤖 AI Error-Fixing Active</strong>
+                            <p style="margin: 5px 0 0 0; font-size: 12px; color: var(--text-dim);">
+                                When code fails on test client, AI will analyze the error and generate a fix (up to 3 attempts).
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -411,6 +473,7 @@
             loadModels();
             loadOpenRouterSettings();
             loadPrivateDiscordMode();
+            loadTestClientSettings();
         }
         
         async function loadPrivateDiscordMode() {
@@ -641,6 +704,37 @@
                 youtubeStatus.className = 'status-badge status-disconnected';
                 youtubeStartBtn.classList.remove('hidden');
                 youtubeStopBtn.classList.add('hidden');
+            }
+            
+            // Test Client
+            if (data.testClient) {
+                const testClientStatus = document.getElementById('testClientStatus');
+                const testClientToggle = document.getElementById('testClientModeToggle');
+                const testClientSettings = document.getElementById('testClientSettings');
+                const testClientInfo = document.getElementById('testClientInfo');
+                
+                testClientToggle.checked = data.testClient.enabled;
+                
+                if (data.testClient.enabled) {
+                    testClientSettings.classList.remove('hidden');
+                    if (data.testClient.isConnected) {
+                        testClientStatus.textContent = 'Connected';
+                        testClientStatus.className = 'status-badge status-connected';
+                        testClientInfo.classList.remove('hidden');
+                        if (data.testClient.lastPollTime) {
+                            document.getElementById('testClientLastPoll').textContent = new Date(data.testClient.lastPollTime).toLocaleTimeString();
+                        }
+                    } else {
+                        testClientStatus.textContent = 'Enabled (Waiting)';
+                        testClientStatus.className = 'status-badge status-pending';
+                        testClientInfo.classList.add('hidden');
+                    }
+                } else {
+                    testClientStatus.textContent = 'Disabled';
+                    testClientStatus.className = 'status-badge status-disconnected';
+                    testClientSettings.classList.add('hidden');
+                    testClientInfo.classList.add('hidden');
+                }
             }
         }
         
@@ -905,6 +999,110 @@
                 await fetch('/api/setup/youtube/stop', { method: 'POST' });
                 showAlert('Stopped YouTube listener', 'info');
                 loadSetupStatus();
+            } catch (err) {
+                showAlert('Network error', 'error');
+            }
+        }
+        
+        // Test Client functions
+        async function loadTestClientSettings() {
+            try {
+                const response = await fetch('/api/setup/test-client');
+                const data = await response.json();
+                
+                document.getElementById('testClientModeToggle').checked = data.enabled;
+                document.getElementById('testClientMap').value = data.testMap || 'gm_flatgrass';
+                document.getElementById('testClientTimeout').value = data.timeoutSeconds || 10;
+                document.getElementById('testClientCleanup').checked = data.cleanupAfterTest !== false;
+                document.getElementById('testClientGmodPath').value = data.gmodPath || '';
+                
+                if (data.enabled) {
+                    document.getElementById('testClientSettings').classList.remove('hidden');
+                }
+            } catch (err) {
+                console.error('Failed to load test client settings:', err);
+            }
+        }
+        
+        async function toggleTestClientMode() {
+            const toggle = document.getElementById('testClientModeToggle');
+            const enabled = toggle.checked;
+            
+            try {
+                const response = await fetch('/api/setup/test-client/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const status = document.getElementById('testClientStatus');
+                    const settings = document.getElementById('testClientSettings');
+                    
+                    if (data.enabled) {
+                        status.textContent = 'Enabled (Waiting)';
+                        status.className = 'status-badge status-pending';
+                        settings.classList.remove('hidden');
+                        showAlert('Test Client Mode enabled! Launch a GMod test client to begin.', 'success');
+                    } else {
+                        status.textContent = 'Disabled';
+                        status.className = 'status-badge status-disconnected';
+                        settings.classList.add('hidden');
+                        showAlert('Test Client Mode disabled', 'info');
+                    }
+                } else {
+                    toggle.checked = !enabled;
+                    showAlert(data.message || 'Failed to toggle test client mode', 'error');
+                }
+            } catch (err) {
+                toggle.checked = !enabled;
+                showAlert('Network error', 'error');
+            }
+        }
+        
+        async function saveTestClientSettings() {
+            const settings = {
+                testMap: document.getElementById('testClientMap').value,
+                timeoutSeconds: parseInt(document.getElementById('testClientTimeout').value) || 10,
+                cleanupAfterTest: document.getElementById('testClientCleanup').checked,
+                gmodPath: document.getElementById('testClientGmodPath').value
+            };
+            
+            try {
+                const response = await fetch('/api/setup/test-client/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(settings)
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    showAlert('Test client settings saved!', 'success');
+                } else {
+                    showAlert(data.message || 'Failed to save settings', 'error');
+                }
+            } catch (err) {
+                showAlert('Network error', 'error');
+            }
+        }
+        
+        async function launchTestClient() {
+            try {
+                showAlert('Launching test client...', 'info');
+                const response = await fetch('/api/setup/test-client/launch', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    showAlert(data.message + (data.note ? ` ${data.note}` : ''), 'success');
+                } else {
+                    showAlert(data.message || 'Failed to launch test client', 'error');
+                }
             } catch (err) {
                 showAlert('Network error', 'error');
             }
