@@ -13,7 +13,7 @@ public class AiCodeGeneratorService
     private readonly SettingsService _settingsService;
     private readonly CommandQueueService _commandQueue;
     private readonly ILogger<AiCodeGeneratorService> _logger;
-    
+
     private const string SystemPrompt = """
         You are an expert Lua scripter for Garry's Mod (GLua). 
         You will receive a request from a livestream chat and the current map name. 
@@ -29,9 +29,10 @@ public class AiCodeGeneratorService
         GROUND RULES:
         1. **Server vs Client Architecture:**
            - You are executing in a SERVER environment.
-           - For Physics, Health, Entities, Spawning, and Gravity: Write standard code.
+           - For Physics, Health, Entities, Spawning, and Gravity: Write standard server-side code.
            - For **UI, HUD, Screen Effects, or Client Sounds**: You CANNOT write them directly. You MUST wrap that specific code inside `RunOnClient([[ ... ]])`.
-           - *Note:* `LocalPlayer()` is only valid inside the `RunOnClient` wrapper. On the server layer, use `player.GetAll()` or `Entity(1)`.
+           - *Note:* `LocalPlayer()` is only valid inside the `RunOnClient` wrapper. On the server layer, use `player.GetAll()` or `Entity(1)` to get the player.
+           - **NEVER** wrap server-side logic (e.g. `ent:SetModelScale`) inside `RunOnClient`.
 
         2. **Temporary Effects:** If the effect is disruptive (blindness, gravity, speed, spawning enemies, screen overlays), you MUST wrap a reversion in a 'timer.Simple'. 
            - Light effects: Can be permanent. (spawning one or a few props/friendly npcs, changing walk speed slightly, chat messages)
@@ -122,9 +123,10 @@ public class AiCodeGeneratorService
         TECHNICAL RULES:
         1. **Server vs Client Architecture:**
            - You are executing in a SERVER environment.
-           - For Physics, Health, Entities, Spawning, and Gravity: Write standard code.
+           - For Physics, Health, Entities, Spawning, and Gravity: Write standard server-side code.
            - For **UI, HUD, Screen Effects, or Client Sounds**: You CANNOT write them directly. You MUST wrap that specific code inside `RunOnClient([[ ... ]])`.
-           - *Note:* `LocalPlayer()` is only valid inside the `RunOnClient` wrapper. On the server layer, use `player.GetAll()` or `Entity(1)`.
+           - *Note:* `LocalPlayer()` is only valid inside the `RunOnClient` wrapper. On the server layer, use `player.GetAll()` or `Entity(1)` to get the player.
+           - **NEVER** wrap server-side logic (e.g. `ent:SetModelScale`) inside `RunOnClient`.
 
         2. **UI:** Make sure you can interact with UI elements and popups that require it! (MakePopup())
            -You can do advanced UI in HTML, for better effects and fancy styling and js.
@@ -170,24 +172,24 @@ public class AiCodeGeneratorService
         _commandQueue = commandQueue;
         _logger = logger;
     }
-    
+
     /// <summary>
     /// Generates Lua code for the given user request.
     /// </summary>
     public async Task<(string ExecutionCode, string UndoCode)> GenerateCodeAsync(
-        string userRequest, 
+        string userRequest,
         string currentMap = "unknown",
         string? imageContext = null,
         bool includeHistory = true)
     {
         var userContent = new StringBuilder();
         userContent.Append($"Current Map: {currentMap}. Request: {userRequest}");
-        
+
         if (!string.IsNullOrEmpty(imageContext))
         {
             userContent.Append($"\n[SYSTEM DETECTED IMAGE CONTEXT]: {imageContext}");
         }
-        
+
         // Include recent command history if enabled
         if (includeHistory && _commandQueue.Preferences.IncludeHistoryInAi)
         {
@@ -201,13 +203,13 @@ public class AiCodeGeneratorService
                 }
             }
         }
-        
+
         try
         {
             var settings = _settingsService.Settings;
             // Use unfiltered prompt when Private Discord Mode is enabled
             var activePrompt = settings.Safety.PrivateDiscordMode ? PrivateDiscordModePrompt : SystemPrompt;
-            
+
             var requestBody = new
             {
                 model = settings.OpenRouter.Model,
@@ -217,7 +219,7 @@ public class AiCodeGeneratorService
                     new { role = "user", content = userContent.ToString() }
                 }
             };
-            
+
             var request = new HttpRequestMessage(HttpMethod.Post, $"{settings.OpenRouter.BaseUrl}/chat/completions")
             {
                 Content = new StringContent(
@@ -225,24 +227,24 @@ public class AiCodeGeneratorService
                     Encoding.UTF8,
                     "application/json")
             };
-            
+
             request.Headers.Add("Authorization", $"Bearer {settings.OpenRouter.ApiKey}");
-            
+
             var response = await _httpClient.SendAsync(request);
             response.EnsureSuccessStatusCode();
-            
+
             var responseContent = await response.Content.ReadAsStringAsync();
             var jsonDoc = JsonDocument.Parse(responseContent);
-            
+
             var code = jsonDoc.RootElement
                 .GetProperty("choices")[0]
                 .GetProperty("message")
                 .GetProperty("content")
                 .GetString() ?? "";
-            
+
             // Clean up markdown if present
             code = code.Replace("```lua", "").Replace("```", "").Trim();
-            
+
             // Parse execution and undo code
             if (code.Contains("---UNDO---"))
             {
@@ -251,7 +253,7 @@ public class AiCodeGeneratorService
                 var undoCode = parts.Length > 1 ? parts[1].Trim() : "print(\"No undo code provided\")";
                 return (executionCode, undoCode);
             }
-            
+
             return (code, "print(\"Undo not available for this command\")");
         }
         catch (Exception ex)
@@ -260,7 +262,7 @@ public class AiCodeGeneratorService
             return ("print(\"AI Generation Failed\")", "print(\"Undo not available\")");
         }
     }
-    
+
     /// <summary>
     /// Generates force undo code for a stuck command.
     /// </summary>
@@ -283,7 +285,7 @@ public class AiCodeGeneratorService
             Be aggressive - we need to ensure this effect is completely gone.
             Return ONLY the Lua code to execute, no explanations.
             """;
-        
+
         try
         {
             var settings = _settingsService.Settings;
@@ -296,7 +298,7 @@ public class AiCodeGeneratorService
                     new { role = "user", content = forceUndoPrompt }
                 }
             };
-            
+
             var request = new HttpRequestMessage(HttpMethod.Post, $"{settings.OpenRouter.BaseUrl}/chat/completions")
             {
                 Content = new StringContent(
@@ -304,21 +306,21 @@ public class AiCodeGeneratorService
                     Encoding.UTF8,
                     "application/json")
             };
-            
+
             request.Headers.Add("Authorization", $"Bearer {settings.OpenRouter.ApiKey}");
-            
+
             var response = await _httpClient.SendAsync(request);
             response.EnsureSuccessStatusCode();
-            
+
             var responseContent = await response.Content.ReadAsStringAsync();
             var jsonDoc = JsonDocument.Parse(responseContent);
-            
+
             var code = jsonDoc.RootElement
                 .GetProperty("choices")[0]
                 .GetProperty("message")
                 .GetProperty("content")
                 .GetString() ?? "";
-            
+
             return code.Replace("```lua", "").Replace("```", "").Trim();
         }
         catch (Exception ex)
