@@ -106,6 +106,7 @@ public class AgenticGameService
            - "attempt to perform arithmetic on" - type conversion issues
            - "bad argument" - wrong argument type or count
            - Syntax errors - check brackets, quotes, commas
+           - Code execution failed (compilation or runtime error) - This is an unknown error, it's possible a function doesnt exist, or a function used isn't available on the realm you're attempting to run it on.
         
         4. Return ONLY the fixed raw Lua code. No markdown, no explanations.
         5. If the code references a function like RunOnClient, make sure it exists in the environment
