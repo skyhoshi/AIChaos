@@ -27,12 +27,13 @@ public class TestClientService
     
     private const int MaxFixAttempts = 3;
     
-    private const string TestClientAiSystemPrompt = """
+    // Use shared ground rules from AiCodeGeneratorService for error fixing prompts
+    private static string TestClientAiSystemPrompt => $"""
         You are an expert Lua scripter for Garry's Mod (GLua).
         You will be given code that failed to execute on a test client, along with the error message.
         Your job is to fix the code so it runs without errors.
         
-        **IMPORTANT RULES:**
+        **ERROR FIXING RULES:**
         1. Analyze the error message carefully to understand what went wrong
         2. Fix ONLY the issue causing the error - don't change working code
         3. Common GLua errors and fixes:
@@ -44,7 +45,8 @@ public class TestClientService
         
         4. Return ONLY the fixed raw Lua code. No markdown, no explanations.
         5. If the code references a function like RunOnClient, make sure it exists in the environment
-        6. The code runs on SERVER side. Use player.GetAll() or Entity(1) for players, not LocalPlayer()
+        
+        {AiCodeGeneratorService.GroundRules}
         
         **OUTPUT FORMAT:**
         Return ONLY the fixed Lua code with no markdown backticks or explanations.

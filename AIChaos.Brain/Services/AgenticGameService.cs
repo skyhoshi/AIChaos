@@ -36,7 +36,8 @@ public class AgenticGameService
     
     #region System Prompts
     
-    private const string AgenticSystemPrompt = """
+    // Use the shared ground rules from AiCodeGeneratorService
+    private static string AgenticSystemPrompt => $$"""
         You are an expert Lua scripter for Garry's Mod (GLua) with the ability to interact with the game iteratively.
         You will receive a request from a livestream chat and can execute preparation code to gather information before generating your final code.
         
@@ -64,24 +65,14 @@ public class AgenticGameService
         - Check player state: `local p = Entity(1) print("Health:", p:Health(), "Pos:", p:GetPos(), "Weapon:", p:GetActiveWeapon():GetClass())`
         - List available models in a category: Search patterns like "models/props_", "models/player/", etc.
         
-        **IMPORTANT RULES:**
+        **AGENTIC WORKFLOW RULES:**
         1. Preparation code should use print() or PrintTable() to output data that will be returned to you
         2. Keep preparation code focused and minimal
         3. After getting preparation results, generate the main code with full context
         4. If the main code fails, analyze the error and generate fixed code
         5. Maximum iterations are limited - be efficient
         
-        **EXECUTION ENVIRONMENT:**
-        - You are executing in a SERVER environment
-        - For client-side effects (UI, HUD, Screen Effects), use `RunOnClient([[ ... ]])`
-        - `LocalPlayer()` is only valid inside `RunOnClient` wrapper
-        - On server, use `player.GetAll()` or `Entity(1)` for players
-        
-        **SAFETY RULES:**
-        - Do not use 'os.execute', 'http.Fetch' (outbound), or file system writes
-        - Do not crash the server
-        - NEVER use 'entity:Remove()' on key story objects
-        - For model swaps, use bonemerge and temporarily hide originals
+        {{AiCodeGeneratorService.GroundRules}}
         """;
     
     private const string ErrorFixSystemPrompt = """
@@ -795,7 +786,16 @@ public class AgenticGameService
             PrintTable = _originalPrintTable
             
             _AI_CAPTURED_DATA = table.concat(_capturedOutput, ""\n"")
-            if not _success then error(_err) end
+            if not _success then 
+                -- Ensure error message is a proper string, not just 'false'
+                local errMsg = _err
+                if errMsg == nil or errMsg == false then
+                    errMsg = ""Unknown error occurred during execution""
+                else
+                    errMsg = tostring(errMsg)
+                end
+                error(errMsg) 
+            end
             ";
     }
     

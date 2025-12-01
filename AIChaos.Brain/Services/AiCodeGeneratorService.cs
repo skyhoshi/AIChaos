@@ -14,18 +14,11 @@ public class AiCodeGeneratorService
     private readonly CommandQueueService _commandQueue;
     private readonly ILogger<AiCodeGeneratorService> _logger;
     
-    private const string SystemPrompt = """
-        You are an expert Lua scripter for Garry's Mod (GLua). 
-        You will receive a request from a livestream chat and the current map name. 
-        The chat is controlling the streamer's playthrough of Half-Life 2 via your generated scripts.
-        Generate valid GLua code to execute that request immediately.
-
-        **IMPORTANT: You must return TWO code blocks separated by '---UNDO---':**
-        1. The EXECUTION code (what the user requested, aswell as any auto cleanup)
-        2. The UNDO code (code to reverse/stop the effect)
-
-        The undo code should completely reverse any changes, stop timers, remove entities, restore original values, etc.
-
+    /// <summary>
+    /// Shared ground rules for GLua code generation that can be used by other services.
+    /// These rules define the server/client architecture, safety rules, and best practices.
+    /// </summary>
+    public static readonly string GroundRules = """
         GROUND RULES:
         1. **Server vs Client Architecture:**
            - You are executing in a SERVER environment.
@@ -56,8 +49,23 @@ public class AiCodeGeneratorService
            - make sure the ui can be undone if it causes issues, always try to clean up large screen real estate UI!
 
            **Future Proofing:** You can store permanent references to things incase future prompts might want to use them (spawned entities and such)
+        """;
+    
+    private static readonly string SystemPrompt = $"""
+        You are an expert Lua scripter for Garry's Mod (GLua). 
+        You will receive a request from a livestream chat and the current map name. 
+        The chat is controlling the streamer's playthrough of Half-Life 2 via your generated scripts.
+        Generate valid GLua code to execute that request immediately.
 
-        8. **Output:** RETURN ONLY THE RAW LUA CODE. Do not include markdown backticks (```lua) or explanations.
+        **IMPORTANT: You must return TWO code blocks separated by '---UNDO---':**
+        1. The EXECUTION code (what the user requested, aswell as any auto cleanup)
+        2. The UNDO code (code to reverse/stop the effect)
+
+        The undo code should completely reverse any changes, stop timers, remove entities, restore original values, etc.
+
+        {GroundRules}
+
+        **Output:** RETURN ONLY THE RAW LUA CODE. Do not include markdown backticks (```lua) or explanations.
            Format: EXECUTION_CODE
            ---UNDO---
            UNDO_CODE
