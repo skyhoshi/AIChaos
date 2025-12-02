@@ -80,16 +80,15 @@ public class UserController : ControllerBase
         }
 
         // Check if user has enough credits
-        const decimal commandCost = 0.10m;
         var user = _userService.GetUser(userId);
         var balance = user?.CreditBalance ?? 0m;
 
-        if (balance < commandCost)
+        if (balance < Constants.CommandCost)
         {
             return Ok(new
             {
                 status = "error",
-                message = $"Insufficient credits. You have ${balance:F2}, but need ${commandCost:F2}",
+                message = $"Insufficient credits. You have ${balance:F2}, but need ${Constants.CommandCost:F2}",
                 balance
             });
         }
@@ -100,7 +99,7 @@ public class UserController : ControllerBase
             var (executionCode, undoCode) = await _codeGenerator.GenerateCodeAsync(request.Prompt);
 
             // Deduct credits
-            if (!_userService.DeductCredits(userId, commandCost))
+            if (!_userService.DeductCredits(userId, Constants.CommandCost))
             {
                 return Ok(new { status = "error", message = "Failed to deduct credits" });
             }
@@ -137,7 +136,7 @@ public class UserController : ControllerBase
                 message = "Command submitted successfully",
                 commandId = entry.Id,
                 balance = newBalance,
-                cost = commandCost
+                cost = Constants.CommandCost
             });
         }
         catch (Exception ex)

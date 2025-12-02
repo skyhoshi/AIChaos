@@ -212,19 +212,24 @@ public class ModerationController : ControllerBase
             });
         }
         
-        // Get the command to find the amount spent
+        // Get the command to find the prompt for audit purposes
         var command = _commandQueue.GetCommand(request.CommandId);
-        var prompt = command?.UserPrompt ?? "Unknown command";
-        const decimal commandCost = 0.10m; // Same cost as in UserController
+        if (command == null)
+        {
+            return NotFound(new { 
+                status = "error", 
+                message = "Command not found. Cannot process refund request." 
+            });
+        }
         
         // Create real refund request
         var refundRequest = _refundService.CreateRequest(
             request.UserId,
             request.UserDisplayName ?? "Unknown",
             request.CommandId,
-            prompt,
+            command.UserPrompt,
             request.Reason,
-            commandCost
+            Constants.CommandCost
         );
         
         return Ok(new { 
