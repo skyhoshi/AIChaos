@@ -67,6 +67,12 @@ app.MapGet("/moderation", async context =>
     await context.Response.SendFileAsync(Path.Combine(app.Environment.WebRootPath, "moderation.html"));
 });
 
+app.MapGet("/dashboard", async context =>
+{
+    context.Response.ContentType = "text/html";
+    await context.Response.SendFileAsync(Path.Combine(app.Environment.WebRootPath, "dashboard.html"));
+});
+
 app.MapControllers();
 
 // Get the settings service to trigger initialization and show moderation password
@@ -75,7 +81,8 @@ var settingsService = app.Services.GetRequiredService<SettingsService>();
 Console.WriteLine("========================================");
 Console.WriteLine("  AI Chaos Brain - C# Edition");
 Console.WriteLine("========================================");
-Console.WriteLine($"  Control Panel: http://localhost:5000/");
+Console.WriteLine($"  Viewer: http://localhost:5000/");
+Console.WriteLine("  Dashboard: http://localhost:5000/dashboard");
 Console.WriteLine("  Setup: http://localhost:5000/setup");
 Console.WriteLine("  History: http://localhost:5000/history");
 Console.WriteLine("  Moderation: http://localhost:5000/moderation");

@@ -66,6 +66,19 @@ public class UserController : ControllerBase
             return BadRequest(new { status = "error", message = "Prompt required" });
         }
 
+        // Check rate limit
+        var (allowed, waitSeconds) = _userService.CheckRateLimit(userId);
+        if (!allowed)
+        {
+            return Ok(new
+            {
+                status = "error",
+                message = $"Please wait {waitSeconds:F0} seconds before submitting another command.",
+                rateLimited = true,
+                waitSeconds
+            });
+        }
+
         // Check if user has enough credits
         const decimal commandCost = 0.10m;
         var user = _userService.GetUser(userId);

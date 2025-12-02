@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace AIChaos.Brain.Controllers;
 
 /// <summary>
-/// Controller for image moderation endpoints.
+/// Controller for image moderation and refund endpoints.
 /// Requires moderation password authentication via X-Moderation-Password header.
 /// </summary>
 [ApiController]
@@ -16,19 +16,29 @@ public class ModerationController : ControllerBase
     private readonly CommandQueueService _commandQueue;
     private readonly AiCodeGeneratorService _codeGenerator;
     private readonly SettingsService _settingsService;
+    private readonly RefundService _refundService;
     private readonly ILogger<ModerationController> _logger;
+    
+    // Reasons that trigger a real refund request (others show fake "Submitted" success)
+    private static readonly string[] RealRefundReasons = new[]
+    {
+        "My request didn't work",
+        "The streamer didn't see my request"
+    };
     
     public ModerationController(
         ImageModerationService moderationService,
         CommandQueueService commandQueue,
         AiCodeGeneratorService codeGenerator,
         SettingsService settingsService,
+        RefundService refundService,
         ILogger<ModerationController> logger)
     {
         _moderationService = moderationService;
         _commandQueue = commandQueue;
         _codeGenerator = codeGenerator;
         _settingsService = settingsService;
+        _refundService = refundService;
         _logger = logger;
     }
     
@@ -164,4 +174,136 @@ public class ModerationController : ControllerBase
         
         return Ok(new { count = _moderationService.PendingCount });
     }
+    
+    // ==========================================
+    // REFUND ENDPOINTS
+    // ==========================================
+    
+    /// <summary>
+    /// Submits a refund request. Public endpoint (no auth required).
+    /// For "fake" reasons, just returns success without creating a real request.
+    /// </summary>
+    [HttpPost("refund/request")]
+    public ActionResult RequestRefund([FromBody] RefundRequestPayload request)
+    {
+        if (string.IsNullOrEmpty(request.UserId))
+        {
+            return BadRequest(new { status = "error", message = "User ID required" });
+        }
+        
+        if (string.IsNullOrEmpty(request.Reason))
+        {
+            return BadRequest(new { status = "error", message = "Reason required" });
+        }
+        
+        // Check if this is a "real" reason that should trigger moderation review
+        var isRealReason = RealRefundReasons.Any(r => 
+            r.Equals(request.Reason, StringComparison.OrdinalIgnoreCase));
+        
+        if (!isRealReason)
+        {
+            // Fake submission - log it but don't create a real request
+            _logger.LogInformation("[REFUND] Fake refund request from {User}: {Reason} (ignored)", 
+                request.UserDisplayName, request.Reason);
+            
+            return Ok(new { 
+                status = "success", 
+                message = "Your report has been submitted. Thank you for your feedback!" 
+            });
+        }
+        
+        // Get the command to find the amount spent
+        var command = _commandQueue.GetCommand(request.CommandId);
+        var prompt = command?.UserPrompt ?? "Unknown command";
+        const decimal commandCost = 0.10m; // Same cost as in UserController
+        
+        // Create real refund request
+        var refundRequest = _refundService.CreateRequest(
+            request.UserId,
+            request.UserDisplayName ?? "Unknown",
+            request.CommandId,
+            prompt,
+            request.Reason,
+            commandCost
+        );
+        
+        return Ok(new { 
+            status = "success", 
+            message = "Your refund request has been submitted for review.",
+            requestId = refundRequest.Id
+        });
+    }
+    
+    /// <summary>
+    /// Gets all pending refund requests. Requires moderation auth.
+    /// </summary>
+    [HttpGet("refund/pending")]
+    public ActionResult GetPendingRefunds()
+    {
+        if (!IsAuthenticated()) return UnauthorizedModerationAccess();
+        
+        var requests = _refundService.GetPendingRequests();
+        return Ok(requests);
+    }
+    
+    /// <summary>
+    /// Approves a refund request and returns credits to user. Requires moderation auth.
+    /// </summary>
+    [HttpPost("refund/approve")]
+    public ActionResult ApproveRefund([FromBody] RefundActionPayload request)
+    {
+        if (!IsAuthenticated()) return UnauthorizedModerationAccess();
+        
+        if (string.IsNullOrEmpty(request.RequestId))
+        {
+            return BadRequest(new { status = "error", message = "Request ID required" });
+        }
+        
+        if (_refundService.ApproveRefund(request.RequestId))
+        {
+            return Ok(new { status = "success", message = "Refund approved and credits returned" });
+        }
+        
+        return NotFound(new { status = "error", message = "Refund request not found or already processed" });
+    }
+    
+    /// <summary>
+    /// Rejects a refund request. Requires moderation auth.
+    /// </summary>
+    [HttpPost("refund/reject")]
+    public ActionResult RejectRefund([FromBody] RefundActionPayload request)
+    {
+        if (!IsAuthenticated()) return UnauthorizedModerationAccess();
+        
+        if (string.IsNullOrEmpty(request.RequestId))
+        {
+            return BadRequest(new { status = "error", message = "Request ID required" });
+        }
+        
+        if (_refundService.RejectRefund(request.RequestId))
+        {
+            return Ok(new { status = "success", message = "Refund request rejected" });
+        }
+        
+        return NotFound(new { status = "error", message = "Refund request not found or already processed" });
+    }
+}
+
+/// <summary>
+/// Payload for submitting a refund request.
+/// </summary>
+public class RefundRequestPayload
+{
+    public string UserId { get; set; } = "";
+    public string? UserDisplayName { get; set; }
+    public int CommandId { get; set; }
+    public string Reason { get; set; } = "";
+}
+
+/// <summary>
+/// Payload for approving or rejecting a refund.
+/// </summary>
+public class RefundActionPayload
+{
+    public string RequestId { get; set; } = "";
 }
