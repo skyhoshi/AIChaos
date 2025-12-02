@@ -119,6 +119,22 @@ public class AccountService
     }
 
     /// <summary>
+    /// Gets an account by username.
+    /// </summary>
+    public Account? GetAccountByUsername(string username)
+    {
+        username = username.Trim().ToLowerInvariant();
+        
+        if (!_usernameIndex.TryGetValue(username, out var accountId))
+        {
+            return null;
+        }
+        
+        _accounts.TryGetValue(accountId, out var account);
+        return account;
+    }
+
+    /// <summary>
     /// Gets an account by session token.
     /// </summary>
     public Account? GetAccountBySession(string sessionToken)

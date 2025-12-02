@@ -152,7 +152,7 @@ public class UserController : ControllerBase
     {
         if (string.IsNullOrEmpty(request.UserId))
         {
-            return BadRequest(new { status = "error", message = "Account ID required" });
+            return BadRequest(new { status = "error", message = "Username required" });
         }
         
         if (request.Amount <= 0)
@@ -160,10 +160,23 @@ public class UserController : ControllerBase
             return BadRequest(new { status = "error", message = "Amount must be positive" });
         }
         
-        var displayName = request.DisplayName ?? "Simulated User";
+        // Look up the account by username
+        var account = _accountService.GetAccountByUsername(request.UserId);
+        if (account == null)
+        {
+            return BadRequest(new { status = "error", message = $"Account '{request.UserId}' not found" });
+        }
+        
+        var displayName = request.DisplayName ?? account.DisplayName ?? account.Username;
+        
+        // If the account has a linked YouTube channel, use that. Otherwise, use the username as channel ID.
+        var channelId = account.LinkedYouTubeChannelId ?? account.Username;
         
         // Add credits to the channel (will go to account if linked, or store as pending)
-        _accountService.AddCreditsToChannel(request.UserId, request.Amount, displayName, "Simulated Super Chat");
+        _accountService.AddCreditsToChannel(channelId, request.Amount, displayName, "Simulated Super Chat");
+        
+        // Get the new balance
+        var newBalance = _accountService.GetBalance(account.Id);
         
         _logger.LogInformation("[ADMIN] Simulated Super Chat: ${Amount} to {User} ({Id})", 
             request.Amount, displayName, request.UserId);
@@ -171,7 +184,8 @@ public class UserController : ControllerBase
         return Ok(new 
         { 
             status = "success", 
-            message = $"Added ${request.Amount:F2} credits to {displayName}"
+            message = $"Added ${request.Amount:F2} credits to {displayName}",
+            newBalance
         });
     }
 }
