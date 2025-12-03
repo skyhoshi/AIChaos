@@ -6,9 +6,11 @@
 @inject ImageModerationService ModerationService
 @inject SettingsService SettingsService
 @inject TestClientService TestClientService
+@inject RefundService RefundService
 @inject HttpClient Http
 @inject IJSRuntime JS
 @using AIChaos.Brain.Components.Layout
+@using AIChaos.Brain.Components.Shared
 @using System.Net.Http.Json
 @implements IDisposable
 
@@ -127,7 +129,9 @@
                         <div class="history-status status-@GetStatusClass(cmd.Status)">@GetStatusText(cmd.Status)</div>
                     </div>
                     <div class="history-actions">
-                        <button @onclick="() => UndoCommand(cmd.Id)" class="btn-warning btn-small">↩ Undo</button>
+                        <button @onclick="() => RepeatCommand(cmd.Id)" class="btn-info btn-small" title="Repeat">🔁 Redo</button>
+                        <button @onclick="() => UndoCommand(cmd.Id)" class="btn-warning btn-small" title="Undo">↩ Undo</button>
+                        <button @onclick="() => OpenRefundModal(cmd.Id)" class="btn-danger btn-small" title="Report Problem" style="font-size: 11px;">⚠️ Report</button>
                     </div>
                 </div>
             }
@@ -135,9 +139,62 @@
     </div>
 </div>
 
+<!-- Refund Modal -->
+<Modal @bind-IsOpen="showRefundModal">
+    <h3>Report a Problem</h3>
+    <p>Why are you requesting a refund for this command?</p>
+    <div style="display: flex; flex-direction: column; gap: 10px; margin: 15px 0;">
+        <label style="display: flex; align-items: center; gap: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 5px; cursor: pointer;">
+            <input type="radio" name="refundReason" value="My request didn't work" checked="@(selectedRefundReason == "My request didn't work")" @onchange="@(() => selectedRefundReason = "My request didn't work")">
+            <span>My request didn't work / AI failed</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 5px; cursor: pointer;">
+            <input type="radio" name="refundReason" value="The streamer didn't see my request" checked="@(selectedRefundReason == "The streamer didn't see my request")" @onchange="@(() => selectedRefundReason = "The streamer didn't see my request")">
+            <span>The streamer didn't see my request</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 5px; cursor: pointer;">
+            <input type="radio" name="refundReason" value="I changed my mind" checked="@(selectedRefundReason == "I changed my mind")" @onchange="@(() => selectedRefundReason = "I changed my mind")">
+            <span>I changed my mind</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 5px; cursor: pointer;">
+            <input type="radio" name="refundReason" value="It wasn't funny" checked="@(selectedRefundReason == "It wasn't funny")" @onchange="@(() => selectedRefundReason = "It wasn't funny")">
+            <span>It wasn't funny</span>
+        </label>
+    </div>
+    <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button @onclick="() => showRefundModal = false" class="btn-secondary">Cancel</button>
+        <button @onclick="SubmitRefund" class="btn-primary">Submit Report</button>
+    </div>
+</Modal>
+
 @* Login/Register Modal *@
 
 <style>
+    .radio-group {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin: 15px 0;
+    }
+
+    .radio-option {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    .radio-option:hover {
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    .radio-option input[type="radio"] {
+        cursor: pointer;
+    }
+
     .history-item {
         display: flex;
         justify-content: space-between;
@@ -211,6 +268,9 @@
     private bool isSubmitting = false;
     private InteractiveSessionResponse? activeInteractiveSession = null;
     private System.Threading.Timer? interactivePollingTimer = null;
+    private bool showRefundModal = false;
+    private int selectedCommandIdForRefund = 0;
+    private string selectedRefundReason = "";
 
     protected override async Task OnParametersSetAsync()
     {
@@ -426,6 +486,71 @@
         }
         
         return Task.CompletedTask;
+    }
+
+    private Task RepeatCommand(int commandId)
+    {
+        try
+        {
+            var success = CommandQueue.RepeatCommand(commandId);
+            ShowStatus(success ? "Command repeated and queued" : "Failed to repeat command", success ? "success" : "error");
+        }
+        catch (Exception ex)
+        {
+            ShowStatus("Error repeating command", "error");
+            Console.WriteLine($"Repeat failed: {ex.Message}");
+        }
+        
+        return Task.CompletedTask;
+    }
+
+    private void OpenRefundModal(int commandId)
+    {
+        selectedCommandIdForRefund = commandId;
+        selectedRefundReason = "";
+        showRefundModal = true;
+    }
+
+    private async Task SubmitRefund()
+    {
+        if (string.IsNullOrEmpty(selectedRefundReason))
+        {
+            ShowStatus("Please select a reason", "error");
+            return;
+        }
+
+        if (currentAccount == null)
+        {
+            ShowStatus("You must be logged in to request a refund", "error");
+            return;
+        }
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/moderation/refund/request", new
+            {
+                UserId = currentAccount.Id,
+                UserDisplayName = currentAccount.DisplayName,
+                CommandId = selectedCommandIdForRefund,
+                Reason = selectedRefundReason
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<Dictionary<string, string>>();
+                ShowStatus(result?["message"] ?? "Report submitted", "success");
+                showRefundModal = false;
+            }
+            else
+            {
+                ShowStatus("Failed to submit report", "error");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowStatus("Error submitting report", "error");
+            Console.WriteLine($"Refund request failed: {ex.Message}");
+        }
     }
 
     private void ShowStatus(string message, string type)
