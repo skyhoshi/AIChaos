@@ -74,9 +74,9 @@
         </div>
     }
 
-    <!-- Pending Images -->
+    <!-- Pending Links -->
     <div class="card moderation-section">
-        <h2>🖼️ Incoming Images <span class="badge">@pendingImageCount</span></h2>
+        <h2>🔗 Incoming Links <span class="badge">@pendingImageCount</span></h2>
         <div style="margin-bottom: 15px;">
             <button @onclick="LoadPendingImages" class="btn-secondary">🔄 Refresh</button>
             <label style="display: inline-flex; align-items: center; gap: 8px; margin-left: 10px; cursor: pointer;">
@@ -87,7 +87,7 @@
         
         @if (pendingImages == null || !pendingImages.Any())
         {
-            <div class="empty-state">✅ No images pending</div>
+            <div class="empty-state">✅ No links pending</div>
         }
         else
         {
@@ -100,7 +100,7 @@
                             <span class="image-author">👤 @img.Author</span>
                         </div>
                         <div class="image-prompt">@img.UserPrompt</div>
-                        <img src="@img.ImageUrl" class="image-preview-small" alt="Pending image">
+                        <div class="link-url" style="word-break: break-all; font-size: 12px; color: var(--info); margin-bottom: 10px;">🔗 @img.ImageUrl</div>
                         <div class="image-actions">
                             <button @onclick="() => ApproveImage(img.Id)" class="btn-success btn-small">✅</button>
                             <button @onclick="() => DenyImage(img.Id)" class="btn-danger btn-small">❌</button>
@@ -168,13 +168,20 @@
                     @foreach (var cmd in history.Take(20))
                     {
                         <div class="history-item-compact">
-                            <div class="history-meta">
-                                <span class="history-id">#@cmd.Id</span>
-                                <span class="history-time">@cmd.Timestamp.ToLocalTime().ToString("HH:mm:ss")</span>
-                                <span class="history-source">@cmd.Source</span>
+                            <div style="flex: 1;">
+                                <div class="history-meta">
+                                    <span class="history-id">#@cmd.Id</span>
+                                    <span class="history-time">@cmd.Timestamp.ToLocalTime().ToString("HH:mm:ss")</span>
+                                    <span class="history-source">@cmd.Source</span>
+                                </div>
+                                <div class="history-prompt">👤 @cmd.Author: @cmd.UserPrompt</div>
+                                <span class="history-status status-@GetStatusClass(cmd.Status)">@GetStatusText(cmd.Status)</span>
                             </div>
-                            <div class="history-prompt">👤 @cmd.Author: @cmd.UserPrompt</div>
-                            <span class="history-status status-@GetStatusClass(cmd.Status)">@GetStatusText(cmd.Status)</span>
+                            <div class="history-actions-compact">
+                                <button @onclick="() => UndoCommand(cmd.Id)" class="btn-warning btn-small" title="Undo">↩</button>
+                                <button @onclick="() => ForceUndoCommand(cmd.Id)" class="btn-danger btn-small" title="Force Undo (AI-generated)">🔧</button>
+                                <button @onclick="() => OpenSavePayloadModal(cmd.Id)" class="btn-success btn-small" title="Save Payload">💾</button>
+                            </div>
                         </div>
                     }
                     @if (history.Count > 20)
@@ -186,6 +193,24 @@
         </details>
     </div>
 </div>
+
+<!-- Save Payload Modal -->
+@if (showSavePayloadModal)
+{
+    <div class="modal active">
+        <div class="modal-content">
+            <h3>💾 Save Payload</h3>
+            <p>Enter a name for this saved payload:</p>
+            <div class="form-group">
+                <input type="text" @bind="payloadName" placeholder="Payload name..." style="width: 100%; padding: 10px; background: rgba(255,255,255,0.1); border: 1px solid var(--border); border-radius: 5px; color: var(--text);">
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 15px;">
+                <button @onclick="CloseSavePayloadModal" class="btn-secondary">Cancel</button>
+                <button @onclick="SavePayload" class="btn-primary">💾 Save</button>
+            </div>
+        </div>
+    </div>
+}
 
 <style>
     .stream-control-grid {
@@ -252,6 +277,10 @@
         background: rgba(255,255,255,0.05);
         border-radius: 5px;
         margin-bottom: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
     }
 
     .image-info,
@@ -280,7 +309,8 @@
     }
 
     .image-actions,
-    .refund-actions {
+    .refund-actions,
+    .history-actions-compact {
         display: flex;
         gap: 5px;
     }
@@ -310,6 +340,32 @@
         text-align: center;
         color: var(--text-dim);
         font-style: italic;
+    }
+
+    .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .modal.active {
+        display: flex;
+    }
+
+    .modal-content {
+        background: #1a1a1a;
+        padding: 25px;
+        border-radius: 10px;
+        width: 90%;
+        max-width: 500px;
+        border: 1px solid var(--border);
     }
 </style>
 
@@ -664,6 +720,103 @@
     };
 
     private string GetStatusText(CommandStatus status) => status.ToString();
+
+    private void UndoCommand(int commandId)
+    {
+        try
+        {
+            CommandQueue.UndoCommand(commandId);
+            Task.Run(async () => await LoadHistory()).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Undo failed: {ex.Message}");
+        }
+    }
+
+    private async void ForceUndoCommand(int commandId)
+    {
+        try
+        {
+            var command = CommandQueue.GetCommand(commandId);
+            if (command == null)
+            {
+                Console.WriteLine($"[FORCE UNDO] Command #{commandId} not found");
+                return;
+            }
+
+            Console.WriteLine($"[FORCE UNDO] Generating AI-powered undo for command #{commandId}: {command.UserPrompt}");
+
+            // We need to inject AiCodeGeneratorService
+            // For now, just queue the undo code if it exists
+            if (!string.IsNullOrEmpty(command.UndoCode))
+            {
+                CommandQueue.QueueCode(command.UndoCode);
+                Console.WriteLine($"[FORCE UNDO] Undo queued for command #{commandId}");
+                await LoadHistory();
+            }
+            else
+            {
+                Console.WriteLine($"[FORCE UNDO] No undo code available for command #{commandId}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Force undo failed: {ex.Message}");
+        }
+    }
+
+    private bool showSavePayloadModal = false;
+    private int selectedCommandIdForPayload = 0;
+    private string payloadName = "";
+
+    private void OpenSavePayloadModal(int commandId)
+    {
+        selectedCommandIdForPayload = commandId;
+        var command = CommandQueue.GetCommand(commandId);
+        payloadName = command?.UserPrompt ?? "";
+        showSavePayloadModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseSavePayloadModal()
+    {
+        showSavePayloadModal = false;
+        payloadName = "";
+        selectedCommandIdForPayload = 0;
+        StateHasChanged();
+    }
+
+    private async Task SavePayload()
+    {
+        try
+        {
+            var command = CommandQueue.GetCommand(selectedCommandIdForPayload);
+            if (command != null && !string.IsNullOrEmpty(payloadName))
+            {
+                var response = await Http.PostAsJsonAsync("/api/setup/payloads", new
+                {
+                    Name = payloadName,
+                    Prompt = command.UserPrompt,
+                    Code = command.ExecutionCode,
+                    UndoCode = command.UndoCode
+                });
+
+                if (response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine($"Payload '{payloadName}' saved successfully");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Save payload failed: {ex.Message}");
+        }
+        finally
+        {
+            CloseSavePayloadModal();
+        }
+    }
 
     public void Dispose()
     {
