@@ -97,7 +97,7 @@ else
         @if (!string.IsNullOrEmpty(youtubeOAuthUrl))
         {
             <p>✅ Click the button below to link via Google:</p>
-            <button @onclick="() => JS.InvokeVoidAsync("open", youtubeOAuthUrl, "_blank")">
+            <button @onclick="OpenYouTubeOAuth">
                 Open Google Sign-In
             </button>
         }
@@ -245,6 +245,14 @@ else
         catch (Exception ex)
         {
             loginError = $"Failed to generate code: {ex.Message}";
+        }
+    }
+
+    private async Task OpenYouTubeOAuth()
+    {
+        if (!string.IsNullOrEmpty(youtubeOAuthUrl))
+        {
+            await JS.InvokeVoidAsync("open", youtubeOAuthUrl, "_blank");
         }
     }
 }

@@ -1,5 +1,6 @@
 @page "/"
 @rendermode InteractiveServer
+@inject AccountService AccountService
 @inject CommandQueueService CommandQueue
 @inject AiCodeGeneratorService CodeGenerator
 @inject ImageModerationService ModerationService
@@ -202,7 +203,7 @@
             );
 
             // Update balance in UI
-            var updatedAccount = AccountService.GetAccountBySession(sessionToken!);
+            var updatedAccount = AccountService.GetAccountById(currentAccount.Id);
             if (updatedAccount != null)
             {
                 currentAccount.CreditBalance = updatedAccount.CreditBalance;
