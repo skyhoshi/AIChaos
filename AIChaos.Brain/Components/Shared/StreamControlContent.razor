@@ -25,10 +25,6 @@
         <!-- Queue Status -->
         <div class="queue-stats">
             <div class="stat-item">
-                <span class="stat-label">Queued:</span>
-                <span class="stat-value">@queueDepth</span>
-            </div>
-            <div class="stat-item">
                 <span class="stat-label">Active Slots:</span>
                 <span class="stat-value">@activeSlots / @totalSlots</span>
             </div>
@@ -306,14 +302,15 @@
     private int blastCount = 1;
     private string blastMessage = "";
     private string blastMessageType = "info";
-    private int queueDepth = 0;
     private int activeSlots = 0;
     private int totalSlots = 0;
+    private CancellationTokenSource? blastMessageCts;
 
     // Video ID
     private string videoId = "";
     private string videoMessage = "";
     private string videoMessageType = "info";
+    private CancellationTokenSource? videoMessageCts;
 
     // Images
     private List<PendingImageEntry>? pendingImages;
@@ -370,14 +367,24 @@
         }
         StateHasChanged();
         
-        _ = Task.Delay(3000).ContinueWith(async _ => 
+        // Clear message after 3 seconds with cancellation support
+        blastMessageCts?.Cancel();
+        blastMessageCts = new CancellationTokenSource();
+        var cts = blastMessageCts;
+        
+        try
         {
+            await Task.Delay(3000, cts.Token);
             await InvokeAsync(() =>
             {
-                blastMessage = "";
-                StateHasChanged();
+                if (!cts.IsCancellationRequested)
+                {
+                    blastMessage = "";
+                    StateHasChanged();
+                }
             });
-        });
+        }
+        catch (OperationCanceledException) { }
     }
 
     private async Task LoadQueueStatus()
@@ -389,11 +396,12 @@
             {
                 totalSlots = response.TotalSlots;
                 activeSlots = response.OccupiedSlots;
-                // Estimate queue depth from available data
-                queueDepth = response.AvailableSlots > 0 ? 0 : activeSlots * 2; // Rough estimate
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to load queue status: {ex.Message}");
+        }
     }
 
     private void LoadVideoId()
@@ -424,9 +432,21 @@
         }
         StateHasChanged();
         
-        await Task.Delay(3000);
-        videoMessage = "";
-        StateHasChanged();
+        // Clear message after 3 seconds with cancellation support
+        videoMessageCts?.Cancel();
+        videoMessageCts = new CancellationTokenSource();
+        var cts = videoMessageCts;
+        
+        try
+        {
+            await Task.Delay(3000, cts.Token);
+            if (!cts.IsCancellationRequested)
+            {
+                videoMessage = "";
+                StateHasChanged();
+            }
+        }
+        catch (OperationCanceledException) { }
     }
 
     private async Task LoadPendingImages()
@@ -445,9 +465,12 @@
         try
         {
             ModerationService.ApproveImage(imageId);
-            _ = LoadPendingImages();
+            Task.Run(async () => await LoadPendingImages()).ConfigureAwait(false);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to approve image: {ex.Message}");
+        }
     }
 
     private void DenyImage(int imageId)
@@ -455,9 +478,12 @@
         try
         {
             ModerationService.DenyImage(imageId);
-            _ = LoadPendingImages();
+            Task.Run(async () => await LoadPendingImages()).ConfigureAwait(false);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to deny image: {ex.Message}");
+        }
     }
 
     private void ToggleAutoRefreshImages()
@@ -495,9 +521,12 @@
         try
         {
             RefundService.ApproveRefund(refundId);
-            _ = LoadPendingRefunds();
+            Task.Run(async () => await LoadPendingRefunds()).ConfigureAwait(false);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to approve refund: {ex.Message}");
+        }
     }
 
     private void DenyRefund(string refundId)
@@ -505,9 +534,12 @@
         try
         {
             RefundService.RejectRefund(refundId);
-            _ = LoadPendingRefunds();
+            Task.Run(async () => await LoadPendingRefunds()).ConfigureAwait(false);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to deny refund: {ex.Message}");
+        }
     }
 
     private async Task LoadHistory()
@@ -555,5 +587,9 @@
     {
         imageRefreshTimer?.Dispose();
         historyRefreshTimer?.Dispose();
+        blastMessageCts?.Cancel();
+        blastMessageCts?.Dispose();
+        videoMessageCts?.Cancel();
+        videoMessageCts?.Dispose();
     }
 }
