@@ -50,8 +50,19 @@
         </label>
     </div>
 
-    <button @onclick="SubmitCommand" disabled="@(currentAccount == null)">
-        @(currentAccount == null ? "🔒 LOGIN TO PLAY" : "⚡ SEND CHAOS ($0.10)")
+    <button @onclick="SubmitCommand" disabled="@(currentAccount == null || isSubmitting)">
+        @if (isSubmitting)
+        {
+            <text>⏳ SENDING...</text>
+        }
+        else if (currentAccount == null)
+        {
+            <text>🔒 LOGIN TO PLAY</text>
+        }
+        else
+        {
+            <text>⚡ SEND CHAOS ($0.10)</text>
+        }
     </button>
     
     @if (!string.IsNullOrEmpty(statusMessage))
@@ -254,6 +265,7 @@
     private List<Command>? recentCommands;
     private string statusMessage = "";
     private string statusType = "info";
+    private bool isSubmitting = false;
     
     // Modal states
     private bool showLoginModal = false;
@@ -418,8 +430,11 @@
 
     private async Task SubmitCommand()
     {
-        if (currentAccount == null || string.IsNullOrWhiteSpace(promptInput))
+        if (currentAccount == null || string.IsNullOrWhiteSpace(promptInput) || isSubmitting)
             return;
+        
+        isSubmitting = true;
+        StateHasChanged();
         
         try
         {
@@ -450,6 +465,11 @@
         {
             ShowStatus("Network error", "error");
             Console.WriteLine($"Submit failed: {ex.Message}");
+        }
+        finally
+        {
+            isSubmitting = false;
+            StateHasChanged();
         }
     }
 
@@ -488,23 +508,28 @@
         statusMessage = message;
         statusType = type;
         StateHasChanged();
-        _ = Task.Delay(3000).ContinueWith(_ => { statusMessage = ""; StateHasChanged(); });
+        _ = Task.Delay(3000).ContinueWith(async _ => 
+        { 
+            await InvokeAsync(() =>
+            {
+                statusMessage = ""; 
+                StateHasChanged();
+            });
+        });
     }
 
     private string GetPlaceholder() => currentAccount == null ? "Login to send commands..." : "Ex: Make everyone tiny, Spawn 10 headcrabs...";
     
-    private string GetStatusClass(int status) => status switch
+    private string GetStatusClass(string status) => status?.ToLower() switch
     {
-        2 => "executed",
-        4 => "failed",
+        "executed" => "executed",
+        "failed" => "failed",
+        "queued" => "queued",
+        "undone" => "undone",
         _ => "pending"
     };
     
-    private string GetStatusText(int status)
-    {
-        var names = new[] { "Pending", "Queued", "Executed", "Undone", "Failed" };
-        return status >= 0 && status < names.Length ? names[status] : "Unknown";
-    }
+    private string GetStatusText(string status) => status ?? "Unknown";
 
     private async Task HandleLoginKeypress(KeyboardEventArgs e)
     {
@@ -528,7 +553,7 @@
         public int Id { get; set; }
         public DateTime Timestamp { get; set; }
         public string UserPrompt { get; set; } = "";
-        public int Status { get; set; }
+        public string Status { get; set; } = "Pending";  // CommandStatus enum as string
     }
 
     private class SessionResponse

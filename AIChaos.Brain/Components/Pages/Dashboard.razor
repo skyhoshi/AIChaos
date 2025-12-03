@@ -295,19 +295,16 @@ else
         _ = Task.Delay(3000).ContinueWith(_ => { statusMessage = ""; StateHasChanged(); });
     }
 
-    private string GetStatusClass(int status) => status switch
+    private string GetStatusClass(string status) => status?.ToLower() switch
     {
-        2 => "executed",
-        4 => "failed",
-        1 => "queued",
+        "executed" => "executed",
+        "failed" => "failed",
+        "queued" => "queued",
+        "undone" => "undone",
         _ => "pending"
     };
     
-    private string GetStatusText(int status)
-    {
-        var names = new[] { "Pending", "Queued", "Executed", "Undone", "Failed" };
-        return status >= 0 && status < names.Length ? names[status] : "Unknown";
-    }
+    private string GetStatusText(string status) => status ?? "Unknown";
 
     private async Task HandleLoginKeypress(KeyboardEventArgs e)
     {
@@ -334,7 +331,7 @@ else
         public string UserPrompt { get; set; } = "";
         public string? AiResponse { get; set; }
         public string Source { get; set; } = "";
-        public int Status { get; set; }
+        public string Status { get; set; } = "Pending";  // CommandStatus enum as string
     }
 
     private class TriggerResponse
