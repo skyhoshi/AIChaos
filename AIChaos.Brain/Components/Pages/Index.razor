@@ -19,7 +19,7 @@
             }
             <span @onclick="() => showProfileModal = true" style="cursor: pointer;" title="View profile">@currentAccount.DisplayName</span>
             <span class="credits-display">$ <span>@currentAccount.Balance.ToString("F2")</span></span>
-            @if (currentAccount.LinkedYouTube)
+            @if (!string.IsNullOrEmpty(currentAccount.LinkedYouTube))
             {
                 <span style="color: var(--success); font-size: 12px;">✓ YouTube Linked</span>
             }
@@ -157,7 +157,7 @@
             <div style="margin-bottom: 15px;">
                 <strong>YouTube Linked:</strong>
                 <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 5px; margin-top: 5px;">
-                    @(currentAccount.LinkedYouTube ? "✅ Linked" : "❌ Not linked")
+                    @(!string.IsNullOrEmpty(currentAccount.LinkedYouTube) ? "✅ Linked" : "❌ Not linked")
                 </div>
             </div>
         </div>
@@ -519,7 +519,7 @@
         public string Username { get; set; } = "";
         public string DisplayName { get; set; } = "";
         public decimal Balance { get; set; }
-        public bool LinkedYouTube { get; set; }
+        public string? LinkedYouTube { get; set; }  // YouTube Channel ID (null if not linked)
         public string? Picture { get; set; }
     }
 
