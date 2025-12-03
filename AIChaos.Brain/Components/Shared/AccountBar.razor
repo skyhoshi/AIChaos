@@ -18,7 +18,6 @@ else
             <img src="@CurrentAccount.PictureUrl" alt="" style="width: 28px; height: 28px; border-radius: 50%;">
         }
         <span @onclick="() => showProfileModal = true" style="cursor: pointer;" title="View profile">@CurrentAccount.DisplayName</span>
-        <span class="credits-display">$ <span>@CurrentAccount.CreditBalance.ToString("F2")</span></span>
         @if (!string.IsNullOrEmpty(CurrentAccount.LinkedYouTubeChannelId))
         {
             <span style="color: var(--success); font-size: 12px;">✓ YouTube Linked</span>
