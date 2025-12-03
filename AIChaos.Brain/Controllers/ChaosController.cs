@@ -12,6 +12,7 @@ namespace AIChaos.Brain.Controllers;
 public class ChaosController : ControllerBase
 {
     private readonly CommandQueueService _commandQueue;
+    private readonly QueueSlotService _queueSlots;
     private readonly AiCodeGeneratorService _codeGenerator;
     private readonly SettingsService _settingsService;
     private readonly ImageModerationService _moderationService;
@@ -21,6 +22,7 @@ public class ChaosController : ControllerBase
 
     public ChaosController(
         CommandQueueService commandQueue,
+        QueueSlotService queueSlots,
         AiCodeGeneratorService codeGenerator,
         SettingsService settingsService,
         ImageModerationService moderationService,
@@ -29,6 +31,7 @@ public class ChaosController : ControllerBase
         ILogger<ChaosController> logger)
     {
         _commandQueue = commandQueue;
+        _queueSlots = queueSlots;
         _codeGenerator = codeGenerator;
         _settingsService = settingsService;
         _moderationService = moderationService;
@@ -79,8 +82,8 @@ public class ChaosController : ControllerBase
             };
         }
 
-        // Test client mode is disabled, use normal queue
-        var result = _commandQueue.PollNextCommand();
+        // Test client mode is disabled, use queue slot service
+        var result = _queueSlots.PollNextCommand();
 
         // Add ngrok bypass header in response (helps with some ngrok configurations)
         Response.Headers.Append("ngrok-skip-browser-warning", "true");
@@ -480,6 +483,37 @@ public class ChaosController : ControllerBase
     {
         return Ok(_agenticService.GetQueueStatus());
     }
+    
+    /// <summary>
+    /// Manual Blast - Bypasses all slot timers and forces immediate execution of queued commands.
+    /// Intended for streamer control. Returns the commands that were blasted.
+    /// </summary>
+    [HttpPost("api/queue/blast")]
+    public ActionResult<ApiResponse> ManualBlast([FromBody] ManualBlastRequest? request)
+    {
+        var count = request?.Count ?? 1;
+        count = Math.Max(1, Math.Min(count, 10)); // Clamp between 1-10
+        
+        var commands = _queueSlots.ManualBlast(count);
+        
+        _logger.LogInformation("[MANUAL BLAST] Forced execution of {Count} command(s)", commands.Count);
+        
+        return Ok(new ApiResponse
+        {
+            Status = "success",
+            Message = $"Blasted {commands.Count} command(s) from queue"
+        });
+    }
+    
+    /// <summary>
+    /// Gets the current queue slot status for monitoring.
+    /// </summary>
+    [HttpGet("api/queue/status")]
+    public ActionResult<QueueSlotStatus> GetQueueSlotStatus()
+    {
+        return Ok(_queueSlots.GetStatus());
+    }
+    
     /// <summary>
     /// Gets public authentication configuration (Client IDs).
     /// </summary>
@@ -491,4 +525,12 @@ public class ChaosController : ControllerBase
             googleClientId = _settingsService.Settings.YouTube.ClientId
         });
     }
+}
+
+/// <summary>
+/// Request for manual blast operation.
+/// </summary>
+public class ManualBlastRequest
+{
+    public int Count { get; set; } = 1;
 }

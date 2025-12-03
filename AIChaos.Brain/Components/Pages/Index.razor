@@ -19,7 +19,8 @@
 <SectionContent SectionId="PageSections.Subtitle">Control the streamer's game!</SectionContent>
 
 <div class="card">
-    <h2>Send Chaos Command</h2>
+    <h2>Send Your Idea</h2>
+    <p style="color: var(--text-dim); font-size: 14px; margin-bottom: 15px;">Each dollar gets you one Idea. Be creative - funny, helpful, or chaotic!</p>
     <div class="form-group">
         <textarea @bind="promptInput" placeholder="@GetPlaceholder()" disabled="@(currentAccount == null)"></textarea>
     </div>
@@ -32,7 +33,7 @@
         </label>
     </div>
 
-    <button @onclick="SubmitCommand" disabled="@(currentAccount == null || isSubmitting)">
+    <button @onclick="SubmitCommand" disabled="@(IsButtonDisabled())">
         @if (isSubmitting)
         {
             <text>⏳ SENDING...</text>
@@ -41,9 +42,13 @@
         {
             <text>🔒 LOGIN TO PLAY</text>
         }
+        else if (currentAccount.CreditBalance < Constants.CommandCost)
+        {
+            <text>💸 You'll need to donate again to send another</text>
+        }
         else
         {
-            <text>⚡ SEND CHAOS ($0.10)</text>
+            <text>⚡ SEND CHAOS</text>
         }
     </button>
     
@@ -112,11 +117,11 @@
 </div>
 
 <div class="card">
-    <h2>📋 Your Recent Commands</h2>
+    <h2>📋 Your Recent Ideas</h2>
     <div id="recentCommands">
         @if (recentCommands == null || !recentCommands.Any())
         {
-            <div class="empty-state">@(currentAccount == null ? "Sign in to see your history..." : "No commands yet.")</div>
+            <div class="empty-state">@(currentAccount == null ? "Sign in to see your history..." : "No Ideas yet.")</div>
         }
         else
         {
@@ -568,7 +573,19 @@
         });
     }
 
-    private string GetPlaceholder() => currentAccount == null ? "Login to send commands..." : "Ex: Make everyone tiny, Spawn 10 headcrabs...";
+    private string GetPlaceholder() => currentAccount == null ? "Login to send Ideas..." : "Ex: Make everyone tiny, Spawn 10 headcrabs...";
+
+    private bool IsButtonDisabled()
+    {
+        if (currentAccount == null || isSubmitting)
+            return true;
+        
+        // Disable if balance is below cost
+        if (currentAccount.CreditBalance < Constants.CommandCost)
+            return true;
+        
+        return false;
+    }
 
     
     private string GetStatusClass(CommandStatus status) => status switch

@@ -6,7 +6,7 @@ namespace AIChaos.Brain.Models;
 public static class Constants
 {
     /// <summary>
-    /// The cost in credits/USD for submitting a command.
+    /// The cost in credits/USD for submitting an Idea.
     /// </summary>
-    public const decimal CommandCost = 0.10m;
+    public const decimal CommandCost = 1.00m;
 }

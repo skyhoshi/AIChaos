@@ -37,6 +37,7 @@ builder.Services.Configure<AppSettings>(builder.Configuration.GetSection("AIChao
 // Register services as singletons
 builder.Services.AddSingleton<SettingsService>();
 builder.Services.AddSingleton<CommandQueueService>();
+builder.Services.AddSingleton<QueueSlotService>();
 builder.Services.AddSingleton<AiCodeGeneratorService>();
 builder.Services.AddSingleton<AccountService>();
 builder.Services.AddSingleton<RefundService>();
