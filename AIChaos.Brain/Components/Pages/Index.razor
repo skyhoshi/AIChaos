@@ -1,6 +1,8 @@
 @page "/"
 @rendermode InteractiveServer
-@inject HttpClient Http
+@inject AccountService AccountService
+@inject CommandQueueService CommandQueue
+@inject AiCodeGeneratorService CodeGenerator
 @inject IJSRuntime JS
 
 <PageTitle>AI Chaos - Viewer Control</PageTitle>
@@ -13,13 +15,13 @@
     else
     {
         <div class="user-profile">
-            @if (!string.IsNullOrEmpty(currentAccount.Picture))
+            @if (!string.IsNullOrEmpty(currentAccount.PictureUrl))
             {
-                <img src="@currentAccount.Picture" alt="" style="width: 28px; height: 28px; border-radius: 50%;">
+                <img src="@currentAccount.PictureUrl" alt="" style="width: 28px; height: 28px; border-radius: 50%;">
             }
             <span @onclick="() => showProfileModal = true" style="cursor: pointer;" title="View profile">@currentAccount.DisplayName</span>
-            <span class="credits-display">$ <span>@currentAccount.Balance.ToString("F2")</span></span>
-            @if (!string.IsNullOrEmpty(currentAccount.LinkedYouTube))
+            <span class="credits-display">$ <span>@currentAccount.CreditBalance.ToString("F2")</span></span>
+            @if (!string.IsNullOrEmpty(currentAccount.LinkedYouTubeChannelId))
             {
                 <span style="color: var(--success); font-size: 12px;">✓ YouTube Linked</span>
             }
@@ -162,13 +164,13 @@
             <div style="margin-bottom: 15px;">
                 <strong>Balance:</strong>
                 <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 5px; margin-top: 5px;">
-                    $@currentAccount.Balance.ToString("F2")
+                    $@currentAccount.CreditBalance.ToString("F2")
                 </div>
             </div>
             <div style="margin-bottom: 15px;">
                 <strong>YouTube Linked:</strong>
                 <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 5px; margin-top: 5px;">
-                    @(!string.IsNullOrEmpty(currentAccount.LinkedYouTube) ? "✅ Linked" : "❌ Not linked")
+                    @(!string.IsNullOrEmpty(currentAccount.LinkedYouTubeChannelId) ? "✅ Linked" : "❌ Not linked")
                 </div>
             </div>
         </div>
@@ -262,7 +264,7 @@
     private string? sessionToken;
     private string promptInput = "";
     private bool interactiveMode = false;
-    private List<Command>? recentCommands;
+    private List<CommandEntry>? recentCommands;
     private string statusMessage = "";
     private string statusType = "info";
     private bool isSubmitting = false;
@@ -310,14 +312,13 @@
     {
         try
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, "/api/account/session");
-            request.Headers.Add("X-Session-Token", sessionToken);
-            var response = await Http.SendAsync(request);
-            var data = await response.Content.ReadFromJsonAsync<SessionResponse>();
+            if (string.IsNullOrEmpty(sessionToken))
+                return;
+                
+            currentAccount = AccountService.GetAccountBySession(sessionToken);
             
-            if (data?.Status == "success" && data.Account != null)
+            if (currentAccount != null)
             {
-                currentAccount = data.Account;
                 await LoadHistory();
             }
             else
@@ -344,25 +345,24 @@
         
         try
         {
-            var response = await Http.PostAsJsonAsync("/api/account/login", new { username = loginUsername, password = loginPassword });
-            var data = await response.Content.ReadFromJsonAsync<LoginResponse>();
+            var (success, error, account, newSessionToken) = AccountService.Login(loginUsername, loginPassword);
             
-            if (data?.Status == "success" && data.Account != null)
+            if (success && account != null && newSessionToken != null)
             {
-                sessionToken = data.SessionToken;
-                currentAccount = data.Account;
+                sessionToken = newSessionToken;
+                currentAccount = account;
                 await JS.InvokeVoidAsync("localStorage.setItem", "aichaos_session", sessionToken);
                 showLoginModal = false;
                 await LoadHistory();
             }
             else
             {
-                loginError = data?.Message ?? "Login failed";
+                loginError = error ?? "Login failed";
             }
         }
         catch (Exception ex)
         {
-            loginError = "Network error";
+            loginError = "Error during login";
             Console.WriteLine($"Login failed: {ex.Message}");
         }
     }
@@ -379,31 +379,36 @@
         
         try
         {
-            var response = await Http.PostAsJsonAsync("/api/account/register", new 
-            { 
-                username = registerUsername, 
-                password = registerPassword,
-                displayName = string.IsNullOrWhiteSpace(registerDisplayName) ? null : registerDisplayName
-            });
-            var data = await response.Content.ReadFromJsonAsync<LoginResponse>();
+            var displayName = string.IsNullOrWhiteSpace(registerDisplayName) ? null : registerDisplayName;
+            var (success, error, account) = AccountService.CreateAccount(registerUsername, registerPassword, displayName);
             
-            if (data?.Status == "success" && data.Account != null)
+            if (success && account != null)
             {
-                sessionToken = data.SessionToken;
-                currentAccount = data.Account;
-                await JS.InvokeVoidAsync("localStorage.setItem", "aichaos_session", sessionToken);
-                showLoginModal = false;
-                await LoadHistory();
-                ShowStatus("Account created! Link your YouTube to receive Super Chat credits.", "success");
+                // Log them in after registration
+                var (loginSuccess, loginError, loginAccount, newSessionToken) = AccountService.Login(registerUsername, registerPassword);
+                
+                if (loginSuccess && loginAccount != null && newSessionToken != null)
+                {
+                    sessionToken = newSessionToken;
+                    currentAccount = loginAccount;
+                    await JS.InvokeVoidAsync("localStorage.setItem", "aichaos_session", sessionToken);
+                    showLoginModal = false;
+                    await LoadHistory();
+                    ShowStatus("Account created! Link your YouTube to receive Super Chat credits.", "success");
+                }
+                else
+                {
+                    registerError = "Account created but login failed. Please log in manually.";
+                }
             }
             else
             {
-                registerError = data?.Message ?? "Registration failed";
+                registerError = error ?? "Registration failed";
             }
         }
         catch (Exception ex)
         {
-            registerError = "Network error";
+            registerError = "Error during registration";
             Console.WriteLine($"Registration failed: {ex.Message}");
         }
     }
@@ -414,9 +419,7 @@
         {
             try
             {
-                var request = new HttpRequestMessage(HttpMethod.Post, "/api/account/logout");
-                request.Headers.Add("X-Session-Token", sessionToken);
-                await Http.SendAsync(request);
+                AccountService.Logout(sessionToken);
             }
             catch { }
         }
@@ -438,32 +441,57 @@
         
         try
         {
-            var endpoint = interactiveMode ? "/trigger/interactive" : "/api/account/submit";
-            var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-            request.Headers.Add("X-Session-Token", sessionToken);
-            request.Content = JsonContent.Create(new { prompt = promptInput, maxIterations = 5 });
-            
-            var response = await Http.SendAsync(request);
-            var data = await response.Content.ReadFromJsonAsync<SubmitResponse>();
-            
-            if (response.IsSuccessStatusCode && data?.Status == "success")
+            // Check rate limit
+            var (allowed, waitSeconds) = AccountService.CheckRateLimit(currentAccount.Id);
+            if (!allowed)
             {
-                promptInput = "";
-                if (data.Balance.HasValue && currentAccount != null)
-                {
-                    currentAccount.Balance = data.Balance.Value;
-                }
-                await LoadHistory();
-                ShowStatus("Command sent successfully!", "success");
+                ShowStatus($"Please wait {waitSeconds:F0} seconds before submitting another command.", "error");
+                return;
             }
-            else
+
+            // Check credits
+            if (currentAccount.CreditBalance < Constants.CommandCost)
             {
-                ShowStatus(data?.Message ?? "Failed to send command", "error");
+                ShowStatus($"Insufficient credits. You have ${currentAccount.CreditBalance:F2}, but need ${Constants.CommandCost:F2}", "error");
+                return;
             }
+
+            // Generate code
+            var (executionCode, undoCode) = await CodeGenerator.GenerateCodeAsync(promptInput);
+
+            // Deduct credits
+            if (!AccountService.DeductCredits(currentAccount.Id, Constants.CommandCost))
+            {
+                ShowStatus("Failed to deduct credits", "error");
+                return;
+            }
+
+            // Add command to queue
+            var command = CommandQueue.AddCommand(
+                userPrompt: promptInput,
+                executionCode: executionCode,
+                undoCode: undoCode,
+                source: "web",
+                author: currentAccount.DisplayName,
+                imageContext: null,
+                userId: currentAccount.Id,
+                aiResponse: null
+            );
+
+            // Update balance in UI
+            var updatedAccount = AccountService.GetAccountBySession(sessionToken!);
+            if (updatedAccount != null)
+            {
+                currentAccount.CreditBalance = updatedAccount.CreditBalance;
+            }
+
+            promptInput = "";
+            await LoadHistory();
+            ShowStatus("Command sent successfully!", "success");
         }
         catch (Exception ex)
         {
-            ShowStatus("Network error", "error");
+            ShowStatus("Error submitting command", "error");
             Console.WriteLine($"Submit failed: {ex.Message}");
         }
         finally
@@ -473,34 +501,38 @@
         }
     }
 
-    private async Task LoadHistory()
+    private Task LoadHistory()
     {
         if (currentAccount == null)
-            return;
+            return Task.CompletedTask;
         
         try
         {
-            var response = await Http.GetFromJsonAsync<HistoryResponse>($"/api/history/user/{Uri.EscapeDataString(currentAccount.Id ?? "")}");
-            recentCommands = response?.History?.TakeLast(10).Reverse().ToList();
+            var history = CommandQueue.GetHistoryForUser(currentAccount.Id);
+            recentCommands = history.TakeLast(10).Reverse().ToList();
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Load history failed: {ex.Message}");
         }
+        
+        return Task.CompletedTask;
     }
 
-    private async Task UndoCommand(int commandId)
+    private Task UndoCommand(int commandId)
     {
         try
         {
-            var response = await Http.PostAsJsonAsync("/api/undo", new { commandId });
-            var data = await response.Content.ReadFromJsonAsync<ApiResponse>();
-            ShowStatus(data?.Status == "success" ? "Undo queued" : data?.Message ?? "Failed", data?.Status == "success" ? "success" : "error");
+            var success = CommandQueue.UndoCommand(commandId);
+            ShowStatus(success ? "Undo queued" : "Failed to undo command", success ? "success" : "error");
         }
-        catch
+        catch (Exception ex)
         {
-            ShowStatus("Network error", "error");
+            ShowStatus("Error undoing command", "error");
+            Console.WriteLine($"Undo failed: {ex.Message}");
         }
+        
+        return Task.CompletedTask;
     }
 
     private void ShowStatus(string message, string type)
@@ -520,72 +552,20 @@
 
     private string GetPlaceholder() => currentAccount == null ? "Login to send commands..." : "Ex: Make everyone tiny, Spawn 10 headcrabs...";
     
-    private string GetStatusClass(string status) => status?.ToLower() switch
+    private string GetStatusClass(CommandStatus status) => status switch
     {
-        "executed" => "executed",
-        "failed" => "failed",
-        "queued" => "queued",
-        "undone" => "undone",
+        CommandStatus.Executed => "executed",
+        CommandStatus.Failed => "failed",
+        CommandStatus.Queued => "queued",
+        CommandStatus.Undone => "undone",
         _ => "pending"
     };
     
-    private string GetStatusText(string status) => status ?? "Unknown";
+    private string GetStatusText(CommandStatus status) => status.ToString();
 
     private async Task HandleLoginKeypress(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
             await DoLogin();
-    }
-
-    // DTOs
-    private class Account
-    {
-        public string? Id { get; set; }
-        public string Username { get; set; } = "";
-        public string DisplayName { get; set; } = "";
-        public decimal Balance { get; set; }
-        public string? LinkedYouTube { get; set; }  // YouTube Channel ID (null if not linked)
-        public string? Picture { get; set; }
-    }
-
-    private class Command
-    {
-        public int Id { get; set; }
-        public DateTime Timestamp { get; set; }
-        public string UserPrompt { get; set; } = "";
-        public string Status { get; set; } = "Pending";  // CommandStatus enum as string
-    }
-
-    private class SessionResponse
-    {
-        public string Status { get; set; } = "";
-        public Account? Account { get; set; }
-    }
-
-    private class LoginResponse
-    {
-        public string Status { get; set; } = "";
-        public string? Message { get; set; }
-        public string? SessionToken { get; set; }
-        public Account? Account { get; set; }
-    }
-
-    private class SubmitResponse
-    {
-        public string Status { get; set; } = "";
-        public string? Message { get; set; }
-        public decimal? Balance { get; set; }
-        public string? SessionId { get; set; }
-    }
-
-    private class HistoryResponse
-    {
-        public List<Command>? History { get; set; }
-    }
-
-    private class ApiResponse
-    {
-        public string Status { get; set; } = "";
-        public string? Message { get; set; }
     }
 }
