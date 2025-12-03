@@ -9,6 +9,7 @@
 @inject IJSRuntime JS
 @inject HttpClient Http
 @using AIChaos.Brain.Components.Layout
+@using AIChaos.Brain.Components.Shared
 
 <PageTitle>AI Chaos Dashboard</PageTitle>
 
@@ -44,6 +45,10 @@ else
 {
     <!-- Admin/Moderator Subtabs -->
     <div class="admin-tabs">
+        <button class="admin-tab @(activeSubPage == "stream" ? "active" : "")"
+        @onclick='() => NavigateToSubPage("stream")'>
+            🎬 Stream Control
+        </button>
         <button class="admin-tab @(activeSubPage == "commands" ? "active" : "")"
         @onclick='() => NavigateToSubPage("commands")'>
             ⚡ Commands
@@ -71,7 +76,11 @@ else
         }
     </div>
 
-    @if (activeSubPage == "commands")
+    @if (activeSubPage == "stream")
+    {
+        <StreamControlContent />
+    }
+    else if (activeSubPage == "commands")
     {
         <!-- Commands Tab Content (original Dashboard content) -->
         <div class="card">
@@ -281,7 +290,7 @@ else
     [Parameter]
     public string? SubPage { get; set; }
 
-    private string activeSubPage = "commands";
+    private string activeSubPage = "stream";
     [CascadingParameter]
     private Account? currentAccount { get; set; }
 

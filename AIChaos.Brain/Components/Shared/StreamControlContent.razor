@@ -1,0 +1,559 @@
+@using AIChaos.Brain.Models
+@using AIChaos.Brain.Services
+@implements IDisposable
+
+@inject ImageModerationService ModerationService
+@inject RefundService RefundService
+@inject CommandQueueService CommandQueue
+@inject SettingsService SettingsService
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<div class="stream-control-grid">
+    <!-- Manual Blast Controls -->
+    <div class="card control-panel">
+        <h2>💥 Queue Control</h2>
+        <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
+            <input type="number" @bind="blastCount" min="1" max="10" 
+                   style="width: 80px; padding: 10px; text-align: center; background: rgba(255,255,255,0.1); border: 1px solid var(--border); border-radius: 5px; color: var(--text);" 
+                   title="Number of commands to blast" />
+            <button @onclick="ManualBlast" class="btn-warning" style="flex: 1;">
+                💥 BLAST QUEUE
+            </button>
+        </div>
+        
+        <!-- Queue Status -->
+        <div class="queue-stats">
+            <div class="stat-item">
+                <span class="stat-label">Queued:</span>
+                <span class="stat-value">@queueDepth</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Active Slots:</span>
+                <span class="stat-value">@activeSlots / @totalSlots</span>
+            </div>
+        </div>
+        
+        <button @onclick="LoadQueueStatus" class="btn-secondary" style="width: 100%; margin-top: 10px;">
+            🔄 Refresh Status
+        </button>
+        
+        @if (!string.IsNullOrEmpty(blastMessage))
+        {
+            <div class="alert alert-@blastMessageType" style="margin-top: 10px;">@blastMessage</div>
+        }
+    </div>
+
+    <!-- YouTube Video ID Setting -->
+    <div class="card control-panel">
+        <h2>📺 Stream Settings</h2>
+        <div class="form-group">
+            <label>Live Stream Video ID</label>
+            <input type="text" @bind="videoId" placeholder="e.g., dQw4w9WgXcQ" 
+                   style="width: 100%; padding: 10px; background: rgba(255,255,255,0.1); border: 1px solid var(--border); border-radius: 5px; color: var(--text);">
+            <small style="color: var(--text-dim);">The video ID from your YouTube live stream URL</small>
+        </div>
+        <button @onclick="SaveVideoId" class="btn-primary" style="width: 100%;">
+            💾 Save Video ID
+        </button>
+        @if (!string.IsNullOrEmpty(videoMessage))
+        {
+            <div class="alert alert-@videoMessageType" style="margin-top: 10px;">@videoMessage</div>
+        }
+    </div>
+
+    <!-- Pending Images -->
+    <div class="card moderation-section">
+        <h2>🖼️ Incoming Images <span class="badge">@pendingImageCount</span></h2>
+        <div style="margin-bottom: 15px;">
+            <button @onclick="LoadPendingImages" class="btn-secondary">🔄 Refresh</button>
+            <label style="display: inline-flex; align-items: center; gap: 8px; margin-left: 10px; cursor: pointer;">
+                <input type="checkbox" @bind="autoRefreshImages" @bind:after="ToggleAutoRefreshImages">
+                <span style="color: var(--text-dim); font-size: 14px;">Auto (5s)</span>
+            </label>
+        </div>
+        
+        @if (pendingImages == null || !pendingImages.Any())
+        {
+            <div class="empty-state">✅ No images pending</div>
+        }
+        else
+        {
+            <div class="image-list">
+                @foreach (var img in pendingImages)
+                {
+                    <div class="image-card-compact">
+                        <div class="image-info">
+                            <span class="image-id">#@img.Id</span>
+                            <span class="image-author">👤 @img.Author</span>
+                        </div>
+                        <div class="image-prompt">@img.UserPrompt</div>
+                        <img src="@img.ImageUrl" class="image-preview-small" alt="Pending image">
+                        <div class="image-actions">
+                            <button @onclick="() => ApproveImage(img.Id)" class="btn-success btn-small">✅</button>
+                            <button @onclick="() => DenyImage(img.Id)" class="btn-danger btn-small">❌</button>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <!-- Pending Refunds -->
+    <div class="card moderation-section">
+        <h2>💰 Refund Requests <span class="badge">@pendingRefundCount</span></h2>
+        <button @onclick="LoadPendingRefunds" class="btn-secondary" style="margin-bottom: 15px;">🔄 Refresh</button>
+        
+        @if (pendingRefunds == null || !pendingRefunds.Any())
+        {
+            <div class="empty-state">✅ No refund requests</div>
+        }
+        else
+        {
+            <div class="refund-list">
+                @foreach (var refund in pendingRefunds)
+                {
+                    <div class="refund-card-compact">
+                        <div class="refund-info">
+                            <span class="refund-id">#@refund.Id</span>
+                            <span class="refund-user">👤 @refund.UserDisplayName</span>
+                            <span class="refund-amount">$@refund.Amount.ToString("F2")</span>
+                        </div>
+                        <div class="refund-reason"><strong>Reason:</strong> @refund.Reason</div>
+                        <div class="refund-actions">
+                            <button @onclick="() => ApproveRefund(refund.Id)" class="btn-success btn-small">✅ Refund</button>
+                            <button @onclick="() => DenyRefund(refund.Id)" class="btn-danger btn-small">❌ Deny</button>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <!-- Global History (with spoiler dropdown) -->
+    <div class="card history-section">
+        <h2>📜 Global History</h2>
+        <div style="margin-bottom: 15px;">
+            <button @onclick="LoadHistory" class="btn-secondary">🔄 Refresh</button>
+            <label style="display: inline-flex; align-items: center; gap: 8px; margin-left: 10px; cursor: pointer;">
+                <input type="checkbox" @bind="autoRefreshHistory" @bind:after="ToggleAutoRefreshHistory">
+                <span style="color: var(--text-dim); font-size: 14px;">Auto (5s)</span>
+            </label>
+        </div>
+        
+        <details class="history-spoiler">
+            <summary style="cursor: pointer; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 5px; margin-bottom: 10px;">
+                ⚠️ Click to reveal history (may spoil effects)
+            </summary>
+            
+            @if (history == null || !history.Any())
+            {
+                <div class="empty-state">No commands in history yet.</div>
+            }
+            else
+            {
+                <div class="history-list">
+                    @foreach (var cmd in history.Take(20))
+                    {
+                        <div class="history-item-compact">
+                            <div class="history-meta">
+                                <span class="history-id">#@cmd.Id</span>
+                                <span class="history-time">@cmd.Timestamp.ToLocalTime().ToString("HH:mm:ss")</span>
+                                <span class="history-source">@cmd.Source</span>
+                            </div>
+                            <div class="history-prompt">👤 @cmd.Author: @cmd.UserPrompt</div>
+                            <span class="history-status status-@GetStatusClass(cmd.Status)">@GetStatusText(cmd.Status)</span>
+                        </div>
+                    }
+                    @if (history.Count > 20)
+                    {
+                        <div class="empty-state">Showing 20 most recent. View full history in History tab.</div>
+                    }
+                </div>
+            }
+        </details>
+    </div>
+</div>
+
+<style>
+    .stream-control-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+    }
+
+    .control-panel {
+        min-height: 200px;
+    }
+
+    .moderation-section,
+    .history-section {
+        grid-column: span 1;
+    }
+
+    .queue-stats {
+        display: flex;
+        gap: 20px;
+        padding: 15px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 8px;
+    }
+
+    .stat-item {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .stat-label {
+        font-size: 12px;
+        color: var(--text-dim);
+    }
+
+    .stat-value {
+        font-size: 24px;
+        font-weight: bold;
+        color: var(--accent);
+    }
+
+    .badge {
+        background: var(--accent);
+        color: #000;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: bold;
+        margin-left: 8px;
+    }
+
+    .image-list,
+    .refund-list,
+    .history-list {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+
+    .image-card-compact,
+    .refund-card-compact,
+    .history-item-compact {
+        padding: 10px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 5px;
+        margin-bottom: 10px;
+    }
+
+    .image-info,
+    .refund-info,
+    .history-meta {
+        display: flex;
+        gap: 10px;
+        font-size: 12px;
+        color: var(--text-dim);
+        margin-bottom: 5px;
+    }
+
+    .image-prompt,
+    .refund-reason,
+    .history-prompt {
+        font-size: 14px;
+        margin-bottom: 10px;
+        color: var(--text);
+    }
+
+    .image-preview-small {
+        max-width: 100%;
+        max-height: 150px;
+        border-radius: 5px;
+        margin-bottom: 10px;
+    }
+
+    .image-actions,
+    .refund-actions {
+        display: flex;
+        gap: 5px;
+    }
+
+    .history-spoiler summary {
+        font-weight: bold;
+        color: var(--warning);
+    }
+
+    .history-status {
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        display: inline-block;
+        margin-top: 5px;
+    }
+
+    .status-pending { background: #888; }
+    .status-pendingmoderation { background: #ff9800; color: #000; }
+    .status-queued { background: #f0ad4e; }
+    .status-executed { background: #5cb85c; }
+    .status-undone { background: #5bc0de; }
+    .status-failed { background: #d9534f; }
+
+    .empty-state {
+        padding: 20px;
+        text-align: center;
+        color: var(--text-dim);
+        font-style: italic;
+    }
+</style>
+
+@code {
+    // Blast controls
+    private int blastCount = 1;
+    private string blastMessage = "";
+    private string blastMessageType = "info";
+    private int queueDepth = 0;
+    private int activeSlots = 0;
+    private int totalSlots = 0;
+
+    // Video ID
+    private string videoId = "";
+    private string videoMessage = "";
+    private string videoMessageType = "info";
+
+    // Images
+    private List<PendingImageEntry>? pendingImages;
+    private int pendingImageCount = 0;
+    private bool autoRefreshImages = false;
+    private System.Threading.Timer? imageRefreshTimer;
+
+    // Refunds
+    private List<RefundRequest>? pendingRefunds;
+    private int pendingRefundCount = 0;
+
+    // History
+    private List<CommandEntry>? history;
+    private bool autoRefreshHistory = false;
+    private System.Threading.Timer? historyRefreshTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAll();
+    }
+
+    private async Task LoadAll()
+    {
+        await LoadPendingImages();
+        await LoadPendingRefunds();
+        await LoadHistory();
+        await LoadQueueStatus();
+        LoadVideoId();
+    }
+
+    private async Task ManualBlast()
+    {
+        try
+        {
+            var count = Math.Max(1, Math.Min(blastCount, 10));
+            var response = await Http.PostAsJsonAsync("/api/queue/blast", new { Count = count });
+            
+            if (response.IsSuccessStatusCode)
+            {
+                blastMessage = $"💥 Blasted {count} command(s)!";
+                blastMessageType = "success";
+                await LoadQueueStatus();
+            }
+            else
+            {
+                blastMessage = "Failed to blast queue";
+                blastMessageType = "error";
+            }
+        }
+        catch (Exception ex)
+        {
+            blastMessage = $"Error: {ex.Message}";
+            blastMessageType = "error";
+        }
+        StateHasChanged();
+        
+        _ = Task.Delay(3000).ContinueWith(async _ => 
+        {
+            await InvokeAsync(() =>
+            {
+                blastMessage = "";
+                StateHasChanged();
+            });
+        });
+    }
+
+    private async Task LoadQueueStatus()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<QueueSlotStatus>("/api/queue/status");
+            if (response != null)
+            {
+                totalSlots = response.TotalSlots;
+                activeSlots = response.OccupiedSlots;
+                // Estimate queue depth from available data
+                queueDepth = response.AvailableSlots > 0 ? 0 : activeSlots * 2; // Rough estimate
+            }
+        }
+        catch { }
+    }
+
+    private void LoadVideoId()
+    {
+        try
+        {
+            var settings = SettingsService.Settings;
+            videoId = settings.YouTube.VideoId ?? "";
+        }
+        catch { }
+    }
+
+    private async Task SaveVideoId()
+    {
+        try
+        {
+            var settings = SettingsService.Settings;
+            settings.YouTube.VideoId = videoId;
+            SettingsService.SaveSettings();
+            
+            videoMessage = "✓ Video ID saved";
+            videoMessageType = "success";
+        }
+        catch (Exception ex)
+        {
+            videoMessage = $"Error: {ex.Message}";
+            videoMessageType = "error";
+        }
+        StateHasChanged();
+        
+        await Task.Delay(3000);
+        videoMessage = "";
+        StateHasChanged();
+    }
+
+    private async Task LoadPendingImages()
+    {
+        try
+        {
+            pendingImages = ModerationService.GetPendingImages();
+            pendingImageCount = pendingImages?.Count ?? 0;
+        }
+        catch { }
+        StateHasChanged();
+    }
+
+    private void ApproveImage(int imageId)
+    {
+        try
+        {
+            ModerationService.ApproveImage(imageId);
+            _ = LoadPendingImages();
+        }
+        catch { }
+    }
+
+    private void DenyImage(int imageId)
+    {
+        try
+        {
+            ModerationService.DenyImage(imageId);
+            _ = LoadPendingImages();
+        }
+        catch { }
+    }
+
+    private void ToggleAutoRefreshImages()
+    {
+        if (autoRefreshImages)
+        {
+            imageRefreshTimer = new System.Threading.Timer(async _ =>
+            {
+                await InvokeAsync(async () =>
+                {
+                    await LoadPendingImages();
+                });
+            }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+        }
+        else
+        {
+            imageRefreshTimer?.Dispose();
+            imageRefreshTimer = null;
+        }
+    }
+
+    private async Task LoadPendingRefunds()
+    {
+        try
+        {
+            pendingRefunds = RefundService.GetPendingRequests();
+            pendingRefundCount = pendingRefunds?.Count ?? 0;
+        }
+        catch { }
+        StateHasChanged();
+    }
+
+    private void ApproveRefund(string refundId)
+    {
+        try
+        {
+            RefundService.ApproveRefund(refundId);
+            _ = LoadPendingRefunds();
+        }
+        catch { }
+    }
+
+    private void DenyRefund(string refundId)
+    {
+        try
+        {
+            RefundService.RejectRefund(refundId);
+            _ = LoadPendingRefunds();
+        }
+        catch { }
+    }
+
+    private async Task LoadHistory()
+    {
+        try
+        {
+            history = CommandQueue.GetHistory().OrderByDescending(c => c.Timestamp).ToList();
+        }
+        catch { }
+        StateHasChanged();
+    }
+
+    private void ToggleAutoRefreshHistory()
+    {
+        if (autoRefreshHistory)
+        {
+            historyRefreshTimer = new System.Threading.Timer(async _ =>
+            {
+                await InvokeAsync(async () =>
+                {
+                    await LoadHistory();
+                });
+            }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+        }
+        else
+        {
+            historyRefreshTimer?.Dispose();
+            historyRefreshTimer = null;
+        }
+    }
+
+    private string GetStatusClass(CommandStatus status) => status switch
+    {
+        CommandStatus.Executed => "executed",
+        CommandStatus.Failed => "failed",
+        CommandStatus.Queued => "queued",
+        CommandStatus.Undone => "undone",
+        CommandStatus.PendingModeration => "pendingmoderation",
+        _ => "pending"
+    };
+
+    private string GetStatusText(CommandStatus status) => status.ToString();
+
+    public void Dispose()
+    {
+        imageRefreshTimer?.Dispose();
+        historyRefreshTimer?.Dispose();
+    }
+}
