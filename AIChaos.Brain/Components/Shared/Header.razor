@@ -1,0 +1,22 @@
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<div class="header">
+    <h1>@Title</h1>
+    @if (!string.IsNullOrEmpty(Subtitle))
+    {
+        <p>@Subtitle</p>
+    }
+    @ChildContent
+</div>
+
+@code {
+    [Parameter]
+    public string Title { get; set; } = "🎮 AI CHAOS";
+
+    [Parameter]
+    public string? Subtitle { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

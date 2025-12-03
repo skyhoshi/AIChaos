@@ -1,0 +1,562 @@
+@page "/"
+@rendermode InteractiveServer
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<PageTitle>AI Chaos - Viewer Control</PageTitle>
+
+<Header Title="🎮 AI CHAOS VIEWER">
+    @if (currentAccount == null)
+    {
+        <button @onclick="() => showLoginModal = true" style="padding: 8px 16px;">🔓 Login / Register</button>
+    }
+    else
+    {
+        <div class="user-profile">
+            @if (!string.IsNullOrEmpty(currentAccount.Picture))
+            {
+                <img src="@currentAccount.Picture" alt="" style="width: 28px; height: 28px; border-radius: 50%;">
+            }
+            <span @onclick="() => showProfileModal = true" style="cursor: pointer;" title="View profile">@currentAccount.DisplayName</span>
+            <span class="credits-display">$ <span>@currentAccount.Balance.ToString("F2")</span></span>
+            @if (currentAccount.LinkedYouTube)
+            {
+                <span style="color: var(--success); font-size: 12px;">✓ YouTube Linked</span>
+            }
+            else
+            {
+                <button @onclick="() => showLinkYouTubeModal = true" title="Link YouTube Channel"
+                        style="background: none; border: none; color: var(--warning); cursor: pointer; font-size: 12px;">📺 Link YouTube</button>
+            }
+            <button @onclick="Logout"
+                    style="background: none; border: none; color: var(--text-dim); cursor: pointer;">(Logout)</button>
+        </div>
+    }
+</Header>
+
+<NavMenu />
+
+<div class="card">
+    <h2>Send Chaos Command</h2>
+    <div class="form-group">
+        <textarea @bind="promptInput" placeholder="@GetPlaceholder()" disabled="@(currentAccount == null)"></textarea>
+    </div>
+
+    <div class="form-group" style="margin-bottom: 15px;">
+        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+            <input type="checkbox" @bind="interactiveMode" style="width: 18px; height: 18px;">
+            <span>🔄 Interactive Mode</span>
+            <span style="color: var(--text-dim); font-size: 12px;">(AI iterates with game)</span>
+        </label>
+    </div>
+
+    <button @onclick="SubmitCommand" disabled="@(currentAccount == null)">
+        @(currentAccount == null ? "🔒 LOGIN TO PLAY" : "⚡ SEND CHAOS ($0.10)")
+    </button>
+    
+    @if (!string.IsNullOrEmpty(statusMessage))
+    {
+        <div style="margin-top: 15px;">
+            <div class="alert alert-@statusType">@statusMessage</div>
+        </div>
+    }
+</div>
+
+<div class="card">
+    <h2>📋 Your Recent Commands</h2>
+    <div id="recentCommands">
+        @if (recentCommands == null || !recentCommands.Any())
+        {
+            <div class="empty-state">@(currentAccount == null ? "Sign in to see your history..." : "No commands yet.")</div>
+        }
+        else
+        {
+            @foreach (var cmd in recentCommands)
+            {
+                <div class="history-item">
+                    <div style="flex: 1;">
+                        <div class="history-time">@cmd.Timestamp.ToLocalTime().ToString("HH:mm:ss")</div>
+                        <div class="history-prompt">@cmd.UserPrompt</div>
+                        <div class="history-status status-@GetStatusClass(cmd.Status)">@GetStatusText(cmd.Status)</div>
+                    </div>
+                    <div class="history-actions">
+                        <button @onclick="() => UndoCommand(cmd.Id)" class="btn-warning btn-small">↩ Undo</button>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@* Login/Register Modal *@
+<Modal @bind-IsOpen="showLoginModal">
+    <h3>🔐 Account Access</h3>
+    <div class="auth-tabs">
+        <button class="auth-tab @(showLogin ? "active" : "")" @onclick="() => { showLogin = true; showRegister = false; }">Login</button>
+        <button class="auth-tab @(showRegister ? "active" : "")" @onclick="() => { showLogin = false; showRegister = true; }">Register</button>
+    </div>
+    
+    @if (showLogin)
+    {
+        <div class="form-group">
+            <label>Username</label>
+            <input type="text" @bind="loginUsername" placeholder="Your username" @onkeydown="HandleLoginKeypress">
+        </div>
+        <div class="form-group">
+            <label>Password</label>
+            <input type="password" @bind="loginPassword" placeholder="Your password" @onkeydown="HandleLoginKeypress">
+        </div>
+        @if (!string.IsNullOrEmpty(loginError))
+        {
+            <div style="color: var(--error); margin: 10px 0;">@loginError</div>
+        }
+        <button @onclick="DoLogin">🔓 Login</button>
+    }
+    else if (showRegister)
+    {
+        <div class="form-group">
+            <label>Username (min 3 chars)</label>
+            <input type="text" @bind="registerUsername" placeholder="Choose a username">
+        </div>
+        <div class="form-group">
+            <label>Display Name (optional)</label>
+            <input type="text" @bind="registerDisplayName" placeholder="How you want to be shown">
+        </div>
+        <div class="form-group">
+            <label>Password (min 4 chars)</label>
+            <input type="password" @bind="registerPassword" placeholder="Choose a password">
+        </div>
+        @if (!string.IsNullOrEmpty(registerError))
+        {
+            <div style="color: var(--error); margin: 10px 0;">@registerError</div>
+        }
+        <button @onclick="DoRegister">✨ Create Account</button>
+    }
+    
+    <button @onclick="() => showLoginModal = false" style="margin-top: 15px; background: transparent; border: 1px solid var(--border); color:white;">Cancel</button>
+</Modal>
+
+@* Profile Modal *@
+<Modal @bind-IsOpen="showProfileModal">
+    <h3>👤 Account Profile</h3>
+    @if (currentAccount != null)
+    {
+        <div style="margin: 20px 0;">
+            <div style="margin-bottom: 15px;">
+                <strong>Username:</strong>
+                <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 5px; margin-top: 5px; font-family: monospace;">
+                    @currentAccount.Username
+                </div>
+            </div>
+            <div style="margin-bottom: 15px;">
+                <strong>Balance:</strong>
+                <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 5px; margin-top: 5px;">
+                    $@currentAccount.Balance.ToString("F2")
+                </div>
+            </div>
+            <div style="margin-bottom: 15px;">
+                <strong>YouTube Linked:</strong>
+                <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 5px; margin-top: 5px;">
+                    @(currentAccount.LinkedYouTube ? "✅ Linked" : "❌ Not linked")
+                </div>
+            </div>
+        </div>
+    }
+    <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button @onclick="() => showProfileModal = false" class="btn-primary">Close</button>
+    </div>
+</Modal>
+
+@* YouTube Link Modal - simplified for now *@
+<Modal @bind-IsOpen="showLinkYouTubeModal">
+    <h3>📺 Link Your YouTube Channel</h3>
+    <p style="color: var(--text-dim);">To receive credits from Super Chats, you need to link your YouTube channel.</p>
+    <p style="color: var(--info); margin-top: 10px;">Feature coming soon in Blazor version!</p>
+    <button @onclick="() => showLinkYouTubeModal = false" style="margin-top: 15px; background: transparent; border: 1px solid var(--border); color:white;">Close</button>
+</Modal>
+
+<style>
+    .user-profile {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: rgba(255, 255, 255, 0.1);
+        padding: 5px 15px;
+        border-radius: 20px;
+    }
+
+    .credits-display {
+        font-size: 18px;
+        font-weight: bold;
+        color: var(--success);
+    }
+
+    .auth-tabs {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 15px;
+    }
+
+    .auth-tab {
+        padding: 8px 16px;
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--text-dim);
+        cursor: pointer;
+        border-radius: 5px;
+    }
+
+    .auth-tab.active {
+        background: var(--primary);
+        color: #000;
+        border-color: var(--primary);
+    }
+
+    .history-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        margin-bottom: 10px;
+    }
+
+    .history-time {
+        color: var(--text-dim);
+        font-size: 12px;
+    }
+
+    .history-prompt {
+        color: var(--text);
+        margin: 5px 0;
+    }
+
+    .history-status {
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        display: inline-block;
+    }
+
+    .status-pending { background: #888; }
+    .status-queued { background: #f0ad4e; }
+    .status-executed { background: #5cb85c; }
+    .status-undone { background: #5bc0de; }
+    .status-failed { background: #d9534f; }
+</style>
+
+@code {
+    private Account? currentAccount;
+    private string? sessionToken;
+    private string promptInput = "";
+    private bool interactiveMode = false;
+    private List<Command>? recentCommands;
+    private string statusMessage = "";
+    private string statusType = "info";
+    
+    // Modal states
+    private bool showLoginModal = false;
+    private bool showProfileModal = false;
+    private bool showLinkYouTubeModal = false;
+    private bool showLogin = true;
+    private bool showRegister = false;
+    
+    // Login form
+    private string loginUsername = "";
+    private string loginPassword = "";
+    private string loginError = "";
+    
+    // Register form
+    private string registerUsername = "";
+    private string registerDisplayName = "";
+    private string registerPassword = "";
+    private string registerError = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Try to restore session from localStorage
+        try
+        {
+            sessionToken = await JS.InvokeAsync<string>("localStorage.getItem", "aichaos_session");
+            if (!string.IsNullOrEmpty(sessionToken))
+            {
+                await CheckSession();
+            }
+        }
+        catch
+        {
+            // localStorage might not be available yet
+        }
+    }
+
+    private async Task CheckSession()
+    {
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, "/api/account/session");
+            request.Headers.Add("X-Session-Token", sessionToken);
+            var response = await Http.SendAsync(request);
+            var data = await response.Content.ReadFromJsonAsync<SessionResponse>();
+            
+            if (data?.Status == "success" && data.Account != null)
+            {
+                currentAccount = data.Account;
+                await LoadHistory();
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("localStorage.removeItem", "aichaos_session");
+                sessionToken = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Session check failed: {ex.Message}");
+        }
+    }
+
+    private async Task DoLogin()
+    {
+        loginError = "";
+        
+        if (string.IsNullOrWhiteSpace(loginUsername) || string.IsNullOrWhiteSpace(loginPassword))
+        {
+            loginError = "Please enter username and password";
+            return;
+        }
+        
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/account/login", new { username = loginUsername, password = loginPassword });
+            var data = await response.Content.ReadFromJsonAsync<LoginResponse>();
+            
+            if (data?.Status == "success" && data.Account != null)
+            {
+                sessionToken = data.SessionToken;
+                currentAccount = data.Account;
+                await JS.InvokeVoidAsync("localStorage.setItem", "aichaos_session", sessionToken);
+                showLoginModal = false;
+                await LoadHistory();
+            }
+            else
+            {
+                loginError = data?.Message ?? "Login failed";
+            }
+        }
+        catch (Exception ex)
+        {
+            loginError = "Network error";
+            Console.WriteLine($"Login failed: {ex.Message}");
+        }
+    }
+
+    private async Task DoRegister()
+    {
+        registerError = "";
+        
+        if (string.IsNullOrWhiteSpace(registerUsername) || string.IsNullOrWhiteSpace(registerPassword))
+        {
+            registerError = "Please fill in all required fields";
+            return;
+        }
+        
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/account/register", new 
+            { 
+                username = registerUsername, 
+                password = registerPassword,
+                displayName = string.IsNullOrWhiteSpace(registerDisplayName) ? null : registerDisplayName
+            });
+            var data = await response.Content.ReadFromJsonAsync<LoginResponse>();
+            
+            if (data?.Status == "success" && data.Account != null)
+            {
+                sessionToken = data.SessionToken;
+                currentAccount = data.Account;
+                await JS.InvokeVoidAsync("localStorage.setItem", "aichaos_session", sessionToken);
+                showLoginModal = false;
+                await LoadHistory();
+                ShowStatus("Account created! Link your YouTube to receive Super Chat credits.", "success");
+            }
+            else
+            {
+                registerError = data?.Message ?? "Registration failed";
+            }
+        }
+        catch (Exception ex)
+        {
+            registerError = "Network error";
+            Console.WriteLine($"Registration failed: {ex.Message}");
+        }
+    }
+
+    private async Task Logout()
+    {
+        if (!string.IsNullOrEmpty(sessionToken))
+        {
+            try
+            {
+                var request = new HttpRequestMessage(HttpMethod.Post, "/api/account/logout");
+                request.Headers.Add("X-Session-Token", sessionToken);
+                await Http.SendAsync(request);
+            }
+            catch { }
+        }
+        
+        currentAccount = null;
+        sessionToken = null;
+        recentCommands = null;
+        await JS.InvokeVoidAsync("localStorage.removeItem", "aichaos_session");
+        StateHasChanged();
+    }
+
+    private async Task SubmitCommand()
+    {
+        if (currentAccount == null || string.IsNullOrWhiteSpace(promptInput))
+            return;
+        
+        try
+        {
+            var endpoint = interactiveMode ? "/trigger/interactive" : "/api/account/submit";
+            var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
+            request.Headers.Add("X-Session-Token", sessionToken);
+            request.Content = JsonContent.Create(new { prompt = promptInput, maxIterations = 5 });
+            
+            var response = await Http.SendAsync(request);
+            var data = await response.Content.ReadFromJsonAsync<SubmitResponse>();
+            
+            if (response.IsSuccessStatusCode && data?.Status == "success")
+            {
+                promptInput = "";
+                if (data.Balance.HasValue && currentAccount != null)
+                {
+                    currentAccount.Balance = data.Balance.Value;
+                }
+                await LoadHistory();
+                ShowStatus("Command sent successfully!", "success");
+            }
+            else
+            {
+                ShowStatus(data?.Message ?? "Failed to send command", "error");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowStatus("Network error", "error");
+            Console.WriteLine($"Submit failed: {ex.Message}");
+        }
+    }
+
+    private async Task LoadHistory()
+    {
+        if (currentAccount == null)
+            return;
+        
+        try
+        {
+            var response = await Http.GetFromJsonAsync<HistoryResponse>($"/api/history/user/{Uri.EscapeDataString(currentAccount.Id ?? "")}");
+            recentCommands = response?.History?.TakeLast(10).Reverse().ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Load history failed: {ex.Message}");
+        }
+    }
+
+    private async Task UndoCommand(int commandId)
+    {
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/undo", new { commandId });
+            var data = await response.Content.ReadFromJsonAsync<ApiResponse>();
+            ShowStatus(data?.Status == "success" ? "Undo queued" : data?.Message ?? "Failed", data?.Status == "success" ? "success" : "error");
+        }
+        catch
+        {
+            ShowStatus("Network error", "error");
+        }
+    }
+
+    private void ShowStatus(string message, string type)
+    {
+        statusMessage = message;
+        statusType = type;
+        StateHasChanged();
+        _ = Task.Delay(3000).ContinueWith(_ => { statusMessage = ""; StateHasChanged(); });
+    }
+
+    private string GetPlaceholder() => currentAccount == null ? "Login to send commands..." : "Ex: Make everyone tiny, Spawn 10 headcrabs...";
+    
+    private string GetStatusClass(int status) => status switch
+    {
+        2 => "executed",
+        4 => "failed",
+        _ => "pending"
+    };
+    
+    private string GetStatusText(int status)
+    {
+        var names = new[] { "Pending", "Queued", "Executed", "Undone", "Failed" };
+        return status >= 0 && status < names.Length ? names[status] : "Unknown";
+    }
+
+    private async Task HandleLoginKeypress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await DoLogin();
+    }
+
+    // DTOs
+    private class Account
+    {
+        public string? Id { get; set; }
+        public string Username { get; set; } = "";
+        public string DisplayName { get; set; } = "";
+        public decimal Balance { get; set; }
+        public bool LinkedYouTube { get; set; }
+        public string? Picture { get; set; }
+    }
+
+    private class Command
+    {
+        public int Id { get; set; }
+        public DateTime Timestamp { get; set; }
+        public string UserPrompt { get; set; } = "";
+        public int Status { get; set; }
+    }
+
+    private class SessionResponse
+    {
+        public string Status { get; set; } = "";
+        public Account? Account { get; set; }
+    }
+
+    private class LoginResponse
+    {
+        public string Status { get; set; } = "";
+        public string? Message { get; set; }
+        public string? SessionToken { get; set; }
+        public Account? Account { get; set; }
+    }
+
+    private class SubmitResponse
+    {
+        public string Status { get; set; } = "";
+        public string? Message { get; set; }
+        public decimal? Balance { get; set; }
+        public string? SessionId { get; set; }
+    }
+
+    private class HistoryResponse
+    {
+        public List<Command>? History { get; set; }
+    }
+
+    private class ApiResponse
+    {
+        public string Status { get; set; } = "";
+        public string? Message { get; set; }
+    }
+}

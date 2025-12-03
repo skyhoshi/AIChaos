@@ -1,5 +1,6 @@
 using AIChaos.Brain.Models;
 using AIChaos.Brain.Services;
+using AIChaos.Brain.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,6 +9,10 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
 builder.Services.AddHttpClient();
+
+// Add Blazor Server services
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents();
 
 // Configure settings
 builder.Services.Configure<AppSettings>(builder.Configuration.GetSection("AIChaos"));
@@ -45,33 +50,12 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
-app.UseDefaultFiles();
 app.UseStaticFiles();
+app.UseAntiforgery();
 
-// Map routes for separate pages
-app.MapGet("/setup", async context =>
-{
-    context.Response.ContentType = "text/html";
-    await context.Response.SendFileAsync(Path.Combine(app.Environment.WebRootPath, "setup.html"));
-});
-
-app.MapGet("/history", async context =>
-{
-    context.Response.ContentType = "text/html";
-    await context.Response.SendFileAsync(Path.Combine(app.Environment.WebRootPath, "history.html"));
-});
-
-app.MapGet("/moderation", async context =>
-{
-    context.Response.ContentType = "text/html";
-    await context.Response.SendFileAsync(Path.Combine(app.Environment.WebRootPath, "moderation.html"));
-});
-
-app.MapGet("/dashboard", async context =>
-{
-    context.Response.ContentType = "text/html";
-    await context.Response.SendFileAsync(Path.Combine(app.Environment.WebRootPath, "dashboard.html"));
-});
+// Map Blazor components
+app.MapRazorComponents<App>()
+    .AddInteractiveServerRenderMode();
 
 app.MapControllers();
 
