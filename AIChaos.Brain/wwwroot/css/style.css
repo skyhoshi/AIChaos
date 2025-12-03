@@ -453,3 +453,22 @@ code {
 .interactive-step {
     border-left: 3px solid var(--info);
 }
+
+.global-account-bar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    padding: 10px 20px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    border-left: 1px solid var(--border);
+    z-index: 1000;
+    border-bottom-left-radius: 8px;
+}
+
+.user-profile {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+}
