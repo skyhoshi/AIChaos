@@ -4,43 +4,35 @@
 @inject SettingsService Settings
 @inject CommandQueueService CommandQueue
 @inject AiCodeGeneratorService CodeGenerator
-@inject AccountService AccountService
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
-<PageTitle>AI Chaos Dashboard</PageTitle>
+<PageTitle>AI Chaos Dashboard (Admin)</PageTitle>
 
-<Header Title="🎮 AI CHAOS DASHBOARD" Subtitle="@GetSubtitle()" />
+<Header Title="🎮 AI CHAOS DASHBOARD" Subtitle="Admin Control Panel - Direct GMod Control" />
 
 <NavMenu />
 
-@if (currentAccount == null)
+@if (!isLoggedIn)
 {
     <div class="login-container">
         <div class="card">
-            <h2>🔒 Login Required</h2>
-            <p style="color: var(--text-dim); margin-bottom: 20px;">Dashboard access requires an account. The first account created is automatically an admin.</p>
+            <h2>🔒 Admin Access Required</h2>
             @if (!string.IsNullOrEmpty(loginAlert))
             {
                 <div class="alert alert-@loginAlertType">@loginAlert</div>
             }
-            <p>Please log in from the <a href="/" style="color: var(--accent);">Viewer page</a>.</p>
-        </div>
-    </div>
-}
-else if (currentAccount.Role < UserRole.Moderator)
-{
-    <div class="login-container">
-        <div class="card">
-            <h2>⛔ Access Denied</h2>
-            <p>Dashboard access requires Moderator or Admin privileges.</p>
-            <p>Contact an administrator to request access.</p>
+            <div class="form-group">
+                <label>Admin Password</label>
+                <input type="password" @bind="loginPassword" placeholder="Enter admin password" @onkeydown="HandleLoginKeypress">
+            </div>
+            <button @onclick="Login">🔓 Login</button>
         </div>
     </div>
 }
 else
 {
-    <!-- Admin/Moderator Subtabs -->
+    <!-- Admin Subtabs -->
     <div class="admin-tabs">
         <button class="admin-tab @(activeSubPage == "commands" ? "active" : "")" @onclick='() => NavigateToSubPage("commands")'>
             ⚡ Commands
@@ -54,12 +46,6 @@ else
         <button class="admin-tab @(activeSubPage == "moderation" ? "active" : "")" @onclick='() => NavigateToSubPage("moderation")'>
             🛡️ Moderation
         </button>
-        @if (currentAccount.Role == UserRole.Admin)
-        {
-            <button class="admin-tab @(activeSubPage == "users" ? "active" : "")" @onclick='() => NavigateToSubPage("users")'>
-                👥 Users
-            </button>
-        }
     </div>
 
     @if (activeSubPage == "commands")
@@ -241,7 +227,8 @@ else
     public string? SubPage { get; set; }
     
     private string activeSubPage = "commands";
-    private Account? currentAccount;
+    private bool isLoggedIn = false;
+    private string loginPassword = "";
     private string loginAlert = "";
     private string loginAlertType = "error";
     private string promptInput = "";
@@ -251,51 +238,54 @@ else
     private string statusMessage = "";
     private string statusType = "info";
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            await LoadSession();
-            StateHasChanged();
-        }
-    }
+    private const string userId = "admin_dashboard";
 
     protected override Task OnInitializedAsync()
     {
         // Set active subpage based on route parameter
         activeSubPage = SubPage?.ToLower() ?? "commands";
-        return Task.CompletedTask;
-    }
-
-    private async Task LoadSession()
-    {
+        
+        // Check if admin is configured
         try
         {
-            var sessionToken = await JS.InvokeAsync<string?>("localStorage.getItem", "sessionToken");
-            if (!string.IsNullOrEmpty(sessionToken))
+            if (!Settings.IsAdminConfigured)
             {
-                currentAccount = AccountService.GetAccountBySession(sessionToken);
-                if (currentAccount != null && currentAccount.Role >= UserRole.Moderator)
-                {
-                    LoadRecentCommands();
-                }
+                loginAlert = "Admin password not set. Please configure it in Setup first.";
+                loginAlertType = "warning";
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Session load failed: {ex.Message}");
+            loginAlert = "Failed to check admin status";
+            Console.WriteLine($"Admin status check failed: {ex.Message}");
         }
+        
+        return Task.CompletedTask;
     }
-    
-    private string GetSubtitle()
+
+    private Task Login()
     {
-        if (currentAccount == null)
-            return "Login Required";
-        if (currentAccount.Role == UserRole.Admin)
-            return "Admin Control Panel";
-        if (currentAccount.Role == UserRole.Moderator)
-            return "Moderator Control Panel";
-        return "Access Denied";
+        try
+        {
+            if (Settings.ValidateAdminPassword(loginPassword))
+            {
+                isLoggedIn = true;
+                LoadRecentCommands();
+            }
+            else
+            {
+                loginAlert = "Invalid password";
+                loginAlertType = "error";
+            }
+        }
+        catch (Exception ex)
+        {
+            loginAlert = "Error during login";
+            loginAlertType = "error";
+            Console.WriteLine($"Login failed: {ex.Message}");
+        }
+        
+        return Task.CompletedTask;
     }
 
     private async Task SendPrompt()
@@ -314,9 +304,9 @@ else
                 executionCode: executionCode,
                 undoCode: undoCode,
                 source: "dashboard",
-                author: currentAccount?.DisplayName ?? "Admin",
+                author: "Admin",
                 imageContext: null,
-                userId: currentAccount?.Id ?? "admin",
+                userId: userId,
                 aiResponse: null
             );
             
@@ -335,7 +325,7 @@ else
     {
         try
         {
-            var history = CommandQueue.GetHistoryForUser(currentAccount?.Id ?? "admin");
+            var history = CommandQueue.GetHistoryForUser(userId);
             recentCommands = history.TakeLast(10).Reverse().ToList();
         }
         catch (Exception ex)
@@ -356,9 +346,9 @@ else
                     executionCode: command.ExecutionCode,
                     undoCode: command.UndoCode,
                     source: "dashboard",
-                    author: currentAccount?.DisplayName ?? "Admin",
+                    author: "Admin",
                     imageContext: command.ImageContext,
-                    userId: currentAccount?.Id ?? "admin",
+                    userId: userId,
                     aiResponse: null
                 );
                 ShowStatus("✓ Command repeated!", "success");
@@ -426,5 +416,23 @@ else
     };
     
     private string GetStatusText(CommandStatus status) => status.ToString();
+
+    private async Task HandleLoginKeypress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await Login();
+    }
+    
+    private string GetModerationPassword()
+    {
+        try
+        {
+            return Settings.ModerationPassword ?? "";
+        }
+        catch
+        {
+            return "";
+        }
+    }
 }
 

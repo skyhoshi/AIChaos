@@ -76,4 +76,19 @@ public class Account
     /// When the session token expires.
     /// </summary>
     public DateTime? SessionExpiresAt { get; set; }
+
+    /// <summary>
+    /// User role: Admin, Moderator, or User
+    /// </summary>
+    public UserRole Role { get; set; } = UserRole.User;
+}
+
+/// <summary>
+/// User roles for permissions system
+/// </summary>
+public enum UserRole
+{
+    User = 0,
+    Moderator = 1,
+    Admin = 2
 }

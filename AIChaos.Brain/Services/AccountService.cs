@@ -56,19 +56,30 @@ public class AccountService
             return (false, "Username already taken", null);
         }
         
+        // First account created becomes admin
+        var isFirstAccount = _accounts.Count == 0;
+        
         var account = new Account
         {
             Username = username,
             PasswordHash = HashPassword(password),
             DisplayName = displayName ?? username,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            Role = isFirstAccount ? UserRole.Admin : UserRole.User
         };
         
         _accounts[account.Id] = account;
         _usernameIndex[username] = account.Id;
         SaveAccounts();
         
-        _logger.LogInformation("[ACCOUNT] Created account: {Username} ({Id})", username, account.Id);
+        if (isFirstAccount)
+        {
+            _logger.LogInformation("[ACCOUNT] Created FIRST account (Admin): {Username} ({Id})", username, account.Id);
+        }
+        else
+        {
+            _logger.LogInformation("[ACCOUNT] Created account: {Username} ({Id})", username, account.Id);
+        }
         
         return (true, null, account);
     }
@@ -436,6 +447,59 @@ public class AccountService
         }
 
         return (true, 0);
+    }
+
+    /// <summary>
+    /// Gets all accounts (for admin user management).
+    /// </summary>
+    public List<Account> GetAllAccounts()
+    {
+        return _accounts.Values.OrderBy(a => a.CreatedAt).ToList();
+    }
+
+    /// <summary>
+    /// Updates a user's role (admin only).
+    /// </summary>
+    public bool UpdateUserRole(string accountId, UserRole newRole)
+    {
+        if (!_accounts.TryGetValue(accountId, out var account))
+        {
+            return false;
+        }
+        
+        account.Role = newRole;
+        SaveAccounts();
+        
+        _logger.LogInformation("[ACCOUNT] Updated role for {Username} to {Role}", account.Username, newRole);
+        return true;
+    }
+
+    /// <summary>
+    /// Deletes a user account (admin only).
+    /// </summary>
+    public bool DeleteAccount(string accountId)
+    {
+        if (!_accounts.TryGetValue(accountId, out var account))
+        {
+            return false;
+        }
+
+        // Remove from all indices
+        _usernameIndex.TryRemove(account.Username, out _);
+        if (!string.IsNullOrEmpty(account.LinkedYouTubeChannelId))
+        {
+            _youtubeIndex.TryRemove(account.LinkedYouTubeChannelId, out _);
+        }
+        if (!string.IsNullOrEmpty(account.SessionToken))
+        {
+            _sessionIndex.TryRemove(account.SessionToken, out _);
+        }
+        
+        _accounts.TryRemove(accountId, out _);
+        SaveAccounts();
+        
+        _logger.LogInformation("[ACCOUNT] Deleted account: {Username} ({Id})", account.Username, accountId);
+        return true;
     }
 
     private static string HashPassword(string password)
