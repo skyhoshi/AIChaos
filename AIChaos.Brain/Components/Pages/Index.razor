@@ -6,8 +6,10 @@
 @inject ImageModerationService ModerationService
 @inject SettingsService SettingsService
 @inject TestClientService TestClientService
+@inject HttpClient Http
 @inject IJSRuntime JS
 @using AIChaos.Brain.Components.Layout
+@using System.Net.Http.Json
 @implements IDisposable
 
 <PageTitle>AI Chaos - Viewer Control</PageTitle>
@@ -47,6 +49,62 @@
     {
         <div style="margin-top: 15px;">
             <div class="alert alert-@statusType">@statusMessage</div>
+        </div>
+    }
+    
+    @if (activeInteractiveSession != null)
+    {
+        <div class="interactive-status" style="margin-top: 15px; padding: 15px; background: rgba(0,255,0,0.1); border: 1px solid var(--success); border-radius: 8px; position: relative;">
+            <button @onclick="DismissInteractiveStatus" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 1px solid var(--text-dim); color: var(--text-dim); padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">✕ Dismiss</button>
+            <h4 style="margin: 0 0 10px 0;">
+                🔄 Interactive Session 
+                <span style="font-size: 12px;">
+                    @if (activeInteractiveSession.IsComplete)
+                    {
+                        @if (activeInteractiveSession.Status == "complete")
+                        {
+                            <span style="color: var(--success);">✓ Complete</span>
+                        }
+                        else
+                        {
+                            <span style="color: var(--error);">✗ Failed</span>
+                        }
+                    }
+                    else
+                    {
+                        <span style="color: var(--warning);">⏳ In Progress</span>
+                    }
+                </span>
+            </h4>
+            <div style="margin: 5px 0;">
+                <strong>Phase:</strong> <span class="phase-badge" style="background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 4px; font-size: 12px;">@activeInteractiveSession.CurrentPhase</span>
+            </div>
+            <div style="margin: 5px 0;">
+                <strong>Iteration:</strong> @activeInteractiveSession.Iteration / 5
+            </div>
+            @if (activeInteractiveSession.Steps.Any())
+            {
+                <div style="margin-top: 10px;">
+                    @foreach (var step in activeInteractiveSession.Steps)
+                    {
+                        <div class="interactive-step" style="margin: 5px 0; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 12px;">
+                            <div><strong>Step @step.StepNumber:</strong> @step.Phase</div>
+                            @if (!string.IsNullOrEmpty(step.AiThinking))
+                            {
+                                <div style="color: var(--text-dim);">💭 @(step.AiThinking.Length > 100 ? step.AiThinking.Substring(0, 100) + "..." : step.AiThinking)</div>
+                            }
+                            @if (step.Success == true)
+                            {
+                                <span style="color: var(--success);">✓ Success</span>
+                            }
+                            else if (step.Success == false)
+                            {
+                                <span style="color: var(--error);">✗ @(step.Error ?? "Failed")</span>
+                            }
+                        </div>
+                    }
+                </div>
+            }
         </div>
     }
 </div>
@@ -113,6 +171,32 @@
     .status-executed { background: #5cb85c; }
     .status-undone { background: #5bc0de; }
     .status-failed { background: #d9534f; }
+
+    .interactive-status {
+        padding: 15px;
+        border-radius: 8px;
+        margin-top: 15px;
+        position: relative;
+    }
+
+    .interactive-status h4 {
+        margin: 0 0 10px 0;
+    }
+
+    .interactive-status .phase-badge {
+        background: rgba(255,255,255,0.1);
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+    }
+
+    .interactive-step {
+        margin: 5px 0;
+        padding: 8px;
+        background: rgba(0,0,0,0.2);
+        border-radius: 4px;
+        font-size: 12px;
+    }
 </style>
 
 @code {
@@ -125,6 +209,8 @@
     private string statusMessage = "";
     private string statusType = "info";
     private bool isSubmitting = false;
+    private InteractiveSessionResponse? activeInteractiveSession = null;
+    private System.Threading.Timer? interactivePollingTimer = null;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -154,6 +240,9 @@
     {
         // Unsubscribe from events
         CommandQueue.HistoryChanged -= OnHistoryChanged;
+        
+        // Stop interactive polling if active
+        interactivePollingTimer?.Dispose();
     }
 
     private async Task SubmitCommand()
@@ -166,6 +255,14 @@
         
         try
         {
+            // If interactive mode is enabled, use the interactive endpoint
+            if (interactiveMode)
+            {
+                await SubmitInteractiveCommand();
+                return;
+            }
+            
+            // Regular command submission
             // Use AccountService to handle the full submission flow
             var (success, message, commandId, newBalance) = await AccountService.SubmitChaosCommandAsync(
                 currentAccount.Id,
@@ -178,7 +275,7 @@
                 addCommandWithStatus: (prompt, execCode, undoCode, source, author, imgCtx, userId, aiResp, status, queue) =>
                     CommandQueue.AddCommandWithStatus(prompt, execCode, undoCode, source, author, imgCtx, userId, aiResp, status, queue),
                 isPrivateDiscordMode: SettingsService.Settings.Safety.PrivateDiscordMode,
-                isTestClientModeEnabled: SettingsService.Settings.TestClient.Enabled
+                isTestClientModeEnabled: TestClientService.IsEnabled
             );
 
             // Update balance in UI
@@ -202,6 +299,99 @@
             isSubmitting = false;
             StateHasChanged();
         }
+    }
+
+    private async Task SubmitInteractiveCommand()
+    {
+        try
+        {
+            // Call the AgenticGameService via HTTP
+            var response = await Http.PostAsJsonAsync(
+                "/trigger/interactive",
+                new { 
+                    Prompt = promptInput,
+                    UserId = currentAccount!.Id,
+                    MaxIterations = 5
+                });
+            
+            var data = await response.Content.ReadFromJsonAsync<InteractiveSessionResponse>();
+            
+            if (data != null && data.Status != "error")
+            {
+                activeInteractiveSession = data;
+                promptInput = "";
+                ShowStatus("🔄 Interactive session started", "info");
+                
+                // Start polling for updates
+                StartInteractivePolling(data.SessionId);
+            }
+            else
+            {
+                ShowStatus(data?.Message ?? "Failed to start interactive session", "error");
+                isSubmitting = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowStatus($"Error: {ex.Message}", "error");
+            isSubmitting = false;
+        }
+    }
+
+    private void StartInteractivePolling(int sessionId)
+    {
+        interactivePollingTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                try
+                {
+                    var response = await Http.GetAsync($"/api/interactive/{sessionId}");
+                    var data = await response.Content.ReadFromJsonAsync<InteractiveSessionResponse>();
+                    
+                    if (data != null)
+                    {
+                        activeInteractiveSession = data;
+                        StateHasChanged();
+                        
+                        if (data.IsComplete)
+                        {
+                            // Session finished
+                            StopInteractivePolling();
+                            isSubmitting = false;
+                            
+                            if (data.Status == "complete")
+                            {
+                                ShowStatus("✓ Interactive session completed successfully!", "success");
+                            }
+                            else
+                            {
+                                ShowStatus("✗ Interactive session failed", "error");
+                            }
+                            
+                            await LoadHistory();
+                            
+                            // Update balance
+                            var updatedAccount = AccountService.GetAccountById(currentAccount!.Id);
+                            if (updatedAccount != null)
+                            {
+                                currentAccount.CreditBalance = updatedAccount.CreditBalance;
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Interactive polling error: {ex.Message}");
+                }
+            });
+        }, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
+    }
+
+    private void StopInteractivePolling()
+    {
+        interactivePollingTimer?.Dispose();
+        interactivePollingTimer = null;
     }
 
     private Task LoadHistory()
@@ -267,4 +457,10 @@
     };
     
     private string GetStatusText(CommandStatus status) => status.ToString();
+
+    private void DismissInteractiveStatus()
+    {
+        activeInteractiveSession = null;
+        StateHasChanged();
+    }
 }
