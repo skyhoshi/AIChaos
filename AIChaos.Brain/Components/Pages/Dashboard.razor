@@ -261,6 +261,23 @@ else
         gap: 10px;
         margin: 20px 0;
         border-bottom: 2px solid var(--bg-darker);
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+    }
+    
+    .admin-tabs::-webkit-scrollbar {
+        height: 6px;
+    }
+    
+    .admin-tabs::-webkit-scrollbar-track {
+        background: var(--bg-darker);
+    }
+    
+    .admin-tabs::-webkit-scrollbar-thumb {
+        background: var(--accent);
+        border-radius: 3px;
     }
 
     .admin-tab {
@@ -273,6 +290,8 @@ else
         transition: all 0.2s;
         border-bottom: 3px solid transparent;
         margin-bottom: -2px;
+        white-space: nowrap;
+        flex-shrink: 0;
     }
 
     .admin-tab:hover {
