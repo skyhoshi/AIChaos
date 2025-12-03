@@ -7,6 +7,7 @@
 @inject AccountService AccountService
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject HttpClient Http
 @using AIChaos.Brain.Components.Layout
 
 <PageTitle>AI Chaos Dashboard</PageTitle>
@@ -74,7 +75,8 @@ else
     {
         <!-- Commands Tab Content (original Dashboard content) -->
         <div class="card">
-            <h2>Send Chaos Command</h2>
+            <h2>Send Your Idea</h2>
+            <p style="color: var(--text-dim); font-size: 14px; margin-bottom: 15px;">Admin mode - no credits required. Each dollar gets viewers one Idea.</p>
             <div class="form-group">
                 <textarea @bind="promptInput"
                     placeholder="Ex: Make everyone tiny, Spawn 10 headcrabs, Turn the screen upside down..."></textarea>
@@ -89,16 +91,22 @@ else
                 </label>
             </div>
 
-            <button @onclick="SendPrompt" disabled="@isSubmitting">
-                @if (isSubmitting)
-                {
-                    <span>⏳ SENDING...</span>
-                }
-                else
-                {
-                    <span>⚡ SEND CHAOS</span>
-                }
-            </button>
+            <div style="display: flex; gap: 10px;">
+                <button @onclick="SendPrompt" disabled="@isSubmitting" style="flex: 1;">
+                    @if (isSubmitting)
+                    {
+                        <span>⏳ SENDING...</span>
+                    }
+                    else
+                    {
+                        <span>⚡ SEND CHAOS</span>
+                    }
+                </button>
+                
+                <button @onclick="ManualBlast" class="btn-warning" style="white-space: nowrap; padding: 0 20px;">
+                    💥 BLAST QUEUE
+                </button>
+            </div>
 
             @if (!string.IsNullOrEmpty(statusMessage))
             {
@@ -109,11 +117,11 @@ else
         </div>
 
         <div class="card">
-            <h2>📋 Recent Commands</h2>
+            <h2>📋 Recent Ideas</h2>
             <div>
                 @if (recentCommands == null || !recentCommands.Any())
                 {
-                    <div class="empty-state">Commands will appear here...</div>
+                    <div class="empty-state">Ideas will appear here...</div>
                 }
                 else
                 {
@@ -425,6 +433,28 @@ else
     {
         activeSubPage = subPage;
         Navigation.NavigateTo($"/dashboard/{subPage}");
+    }
+    
+    private async Task ManualBlast()
+    {
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/queue/blast", new { Count = 1 });
+            
+            if (response.IsSuccessStatusCode)
+            {
+                ShowStatus("💥 Queue blasted! Command executed immediately.", "success");
+            }
+            else
+            {
+                ShowStatus("⚠️ Failed to blast queue", "error");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowStatus($"✗ ERROR: {ex.Message}", "error");
+            Console.WriteLine($"Manual blast failed: {ex.Message}");
+        }
     }
 
     private string GetStatusClass(CommandStatus status) => status switch
