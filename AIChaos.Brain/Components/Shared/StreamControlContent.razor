@@ -478,7 +478,11 @@
                 }
             });
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException)
+        {
+            // Cancellation is expected when the user triggers a new blast or navigates away.
+            // No action needed.
+        }
     }
 
     private async Task LoadQueueStatus()
