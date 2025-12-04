@@ -224,8 +224,9 @@ To let viewers send Ideas (like through YouTube Super Chats), you need a public 
    cd AIChaos.Brain
    dotnet run --urls "http://0.0.0.0:5000"
    ```
+   > ⚠️ **Production tip**: For public deployments, set up a reverse proxy (nginx/caddy) with HTTPS instead of exposing port 5000 directly.
 
-2. Make sure port 5000 is accessible (configure firewall/security groups)
+2. Make sure port 5000 is accessible from your gaming PC (configure firewall/security groups)
 
 3. In your **GMod addons folder** on your gaming PC, create a file:
    ```
@@ -245,11 +246,11 @@ To let viewers send Ideas (like through YouTube Super Chats), you need a public 
 
 **Security recommendations:**
 - 🔒 **Use HTTPS in production** - Set up a reverse proxy (nginx/caddy) with SSL certificates (use Let's Encrypt for free SSL)
-- 🔒 **Restrict firewall access** - Only allow connections from your gaming PC's IP if possible
+- 🔒 **Firewall configuration** - For viewer submissions, keep port 80/443 open; optionally restrict admin dashboard access with IP filtering on your reverse proxy
 - 🔒 **Set admin password** - Protect the dashboard from unauthorized access (configured on first visit)
 - 🔒 **Monitor the History tab** - Keep an eye on submitted Ideas for abuse
 
-> ⚠️ **Note**: The example uses HTTP for simplicity. For production, use a reverse proxy with HTTPS to encrypt traffic.
+> ⚠️ **Note**: The example uses HTTP for simplicity. For production streaming, use a reverse proxy with HTTPS to encrypt traffic. The public submission page needs to be accessible to viewers, but you can protect admin routes with additional authentication.
 
 **Example cloud providers:**
 - **DigitalOcean** - Simple droplets starting at $6/month
