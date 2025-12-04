@@ -119,30 +119,113 @@ public class ModerationController : ControllerBase
         
         _logger.LogInformation("[MODERATION] Processing approved image for: {Prompt}", entry.UserPrompt);
         
+        // Check if there's an existing placeholder command for this image
+        CommandEntry? command = null;
+        
+        if (entry.CommandId.HasValue)
+        {
+            // Get the existing command that was created when the user submitted
+            command = _commandQueue.GetCommand(entry.CommandId.Value);
+            
+            if (command != null && command.Status == CommandStatus.PendingModeration)
+            {
+                _logger.LogInformation("[MODERATION] Updating existing command #{CommandId} from PendingModeration to Queued", 
+                    command.Id);
+                
+                // Check if this was an interactive mode submission
+                var isInteractiveMode = command.AiResponse?.Contains("[Interactive Mode]") ?? false;
+                
+                if (isInteractiveMode)
+                {
+                    // For interactive mode, we need to trigger an interactive session instead of just generating code
+                    _logger.LogInformation("[MODERATION] Approved image is for interactive mode - starting interactive session");
+                    
+                    // Update command status to show it's being processed
+                    command.Status = CommandStatus.Queued;
+                    command.AiResponse = "?? Image approved - starting interactive session...";
+                    command.ImageContext = entry.ImageUrl;
+                    
+                    // We can't directly start an interactive session from here because we need the full
+                    // AccountService flow. Instead, we'll mark it for processing and let the client
+                    // poll for updates or trigger the session manually.
+                    
+                    // TODO: Consider adding a callback mechanism or webhook to notify the client
+                    // For now, the command will be in Queued status with a message indicating
+                    // that the moderator should manually trigger the interactive session
+                    
+                    return Ok(new ApiResponse
+                    {
+                        Status = "success",
+                        Message = "Image approved for interactive mode. User should refresh or resubmit the prompt.",
+                        CommandId = command.Id
+                    });
+                }
+                
+                // Regular mode (non-interactive) - generate code and queue
+                // Generate code with image context now that it's approved
+                var (executionCode, undoCode) = await _codeGenerator.GenerateCodeAsync(
+                    entry.UserPrompt,
+                    imageContext: $"Image URL: {entry.ImageUrl}");
+                
+                // Update the existing command
+                command.ExecutionCode = executionCode;
+                command.UndoCode = undoCode;
+                command.ImageContext = entry.ImageUrl;
+                command.AiResponse = null; // Clear the "waiting for moderation" message
+                command.Status = CommandStatus.Queued;
+                
+                // Check if test client mode is enabled
+                var isTestClientModeEnabled = _settingsService.Settings.TestClient.Enabled;
+                
+                // Queue for execution (respect test client mode)
+                if (isTestClientModeEnabled)
+                {
+                    _testClientService.QueueForTesting(command.Id, executionCode, entry.UserPrompt);
+                    _logger.LogInformation("[MODERATION] Approved image command #{CommandId} queued for testing", command.Id);
+                }
+                else
+                {
+                    // Add to execution queue
+                    _commandQueue.QueueCommand(command);
+                    _logger.LogInformation("[MODERATION] Approved image command #{CommandId} queued for execution", command.Id);
+                }
+                
+                return Ok(new ApiResponse
+                {
+                    Status = "success",
+                    Message = "Image approved and command queued",
+                    CommandId = command.Id
+                });
+            }
+        }
+        
+        // Fallback: If no existing command was found (shouldn't happen), create a new one
+        _logger.LogWarning("[MODERATION] No existing command found for image #{ImageId}, creating new command", request.ImageId);
+        
         // Generate code with image context now that it's approved
-        var (executionCode, undoCode) = await _codeGenerator.GenerateCodeAsync(
+        var (execCode, undoCodeNew) = await _codeGenerator.GenerateCodeAsync(
             entry.UserPrompt,
             imageContext: $"Image URL: {entry.ImageUrl}");
         
         // Check if test client mode is enabled
-        var isTestClientModeEnabled = _settingsService.Settings.TestClient.Enabled;
+        var testClientEnabled = _settingsService.Settings.TestClient.Enabled;
         
         // Add to command queue (respect test client mode)
-        var command = _commandQueue.AddCommand(
+        command = _commandQueue.AddCommand(
             entry.UserPrompt,
-            executionCode,
-            undoCode,
+            execCode,
+            undoCodeNew,
             entry.Source,
             entry.Author,
             entry.ImageUrl,
             entry.UserId,
             null,
-            queueForExecution: !isTestClientModeEnabled);
+            queueForExecution: !testClientEnabled);
         
         // If test client mode is enabled, queue for testing
-        if (isTestClientModeEnabled)
+        if (testClientEnabled)
         {
-            _testClientService.QueueForTesting(command.Id, executionCode, entry.UserPrompt);
+            _testClientService.QueueForTesting(command.Id, execCode, entry.UserPrompt);
             _logger.LogInformation("[MODERATION] Approved image command #{CommandId} queued for testing", command.Id);
         }
         else

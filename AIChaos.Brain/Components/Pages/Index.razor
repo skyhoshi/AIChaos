@@ -276,10 +276,12 @@
     private bool showRefundModal = false;
     private int selectedCommandIdForRefund = 0;
     private string selectedRefundReason = "";
+    private bool _isInitialized = false;
 
     protected override async Task OnParametersSetAsync()
     {
-        if (currentAccount != null)
+        // Only load history if we have an account and component is initialized
+        if (currentAccount != null && _isInitialized)
         {
             await LoadHistory();
         }
@@ -287,6 +289,8 @@
 
     protected override void OnInitialized()
     {
+        _isInitialized = true;
+        
         // Subscribe to history changes
         CommandQueue.HistoryChanged += OnHistoryChanged;
     }
@@ -296,8 +300,15 @@
         // Reload history when it changes
         await InvokeAsync(async () =>
         {
-            await LoadHistory();
-            StateHasChanged();
+            try
+            {
+                await LoadHistory();
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in OnHistoryChanged: {ex.Message}");
+            }
         });
     }
 
@@ -320,6 +331,14 @@
         
         try
         {
+            // Check balance FIRST (before starting interactive session)
+            if (currentAccount.CreditBalance < Constants.CommandCost)
+            {
+                ShowStatus($"Insufficient credits. You need ${Constants.CommandCost:F2}", "error");
+                isSubmitting = false;
+                return;
+            }
+            
             // If interactive mode is enabled, use the interactive endpoint
             if (interactiveMode)
             {
@@ -370,11 +389,47 @@
     {
         try
         {
-            // Call the AgenticGameService via HTTP
+            // Use AccountService to handle credit deduction and moderation checks
+            var (success, message, commandId, newBalance) = await AccountService.SubmitInteractiveCommandAsync(
+                currentAccount!.Id,
+                promptInput,
+                needsModeration: ModerationService.NeedsModeration,
+                extractImageUrls: ModerationService.ExtractImageUrls,
+                addPendingImage: (url, prompt, source, author, userId, cmdId) => 
+                    ModerationService.AddPendingImage(url, prompt, source, author, userId, cmdId),
+                addCommandWithStatus: (prompt, execCode, undoCode, source, author, imgCtx, userId, aiResp, status, queue) =>
+                    CommandQueue.AddCommandWithStatus(prompt, execCode, undoCode, source, author, imgCtx, userId, aiResp, status, queue),
+                isPrivateDiscordMode: SettingsService.Settings.Safety.PrivateDiscordMode
+            );
+            
+            // Update balance in UI
+            currentAccount.CreditBalance = newBalance;
+            
+            if (!success)
+            {
+                // If it failed (moderation, rate limit, etc), show the error
+                ShowStatus(message, "error");
+                isSubmitting = false;
+                return;
+            }
+            
+            // If we got a command ID, it means it's pending moderation
+            if (commandId.HasValue && message.Contains("moderation"))
+            {
+                ShowStatus(message, "info");
+                promptInput = "";
+                await LoadHistory();
+                isSubmitting = false;
+                return;
+            }
+            
+            // Otherwise, start the interactive session
             var response = await Http.PostAsJsonAsync(
                 "/trigger/interactive",
                 new { 
                     Prompt = promptInput,
+                    Source = "web",
+                    Author = currentAccount!.DisplayName,
                     UserId = currentAccount!.Id,
                     MaxIterations = 5
                 });

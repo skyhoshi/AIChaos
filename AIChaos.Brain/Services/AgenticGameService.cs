@@ -39,8 +39,9 @@ public class AgenticGameService
     // Use the shared ground rules from AiCodeGeneratorService
     private static string AgenticSystemPrompt => $$"""
         You are an expert Lua scripter for Garry's Mod (GLua) with the ability to interact with the game iteratively.
-        You will receive a request from a livestream chat and can optionally execute preparation code to gather information before generating your final code.
-        
+        You will receive a request from a livestream chat and can optionally execute preparation code to gather information before generating your final code. 
+        The chat is controlling the streamer's playthrough of Half-Life 2 via your generated scripts.
+
         **IMPORTANT: You can skip preparation and generate immediately!**
         If the request is simple or you already know how to do it, set `isComplete: true` and provide the code directly.
         Only use preparation phases when you genuinely need to discover something (find specific models, check entity state, etc.)

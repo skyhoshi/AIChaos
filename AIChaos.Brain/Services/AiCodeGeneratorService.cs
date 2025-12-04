@@ -23,6 +23,7 @@ public class AiCodeGeneratorService
     // A future RunOnClientAndCapture() could allow the agent to get client-side data for decision-making.
     
     public static readonly string GroundRules = """
+        
         GROUND RULES:
         1. **Server vs Client Architecture:**
            - You are executing in a SERVER environment.
@@ -53,7 +54,10 @@ public class AiCodeGeneratorService
            - always try to include a close button in interactable ui if you can. (only make them interactable if needed!!!!!)
            - make sure the ui can be undone if it causes issues, always try to clean up large screen real estate UI!
 
-           **Future Proofing:** You can store permanent references to things incase future prompts might want to use them (spawned entities and such)
+           **Future Proofing:** You can s`tore permanent references to things incase future prompts might want to use them (spawned entities and such)
+        
+        8. **Restrictions:** Do NOT change or reload the map! Do NOT attempt to spawn the player in other maps!
+           
         """;
     
     private static readonly string SystemPrompt = $"""

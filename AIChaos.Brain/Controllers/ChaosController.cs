@@ -260,12 +260,15 @@ public class ChaosController : ControllerBase
             });
         }
 
-        _logger.LogInformation("[INTERACTIVE] Starting interactive session for: {Prompt}", request.Prompt);
+        _logger.LogInformation("[INTERACTIVE] Starting interactive session for: {Prompt} from {Author}", 
+            request.Prompt, request.Author ?? "anonymous");
 
         // Convert to AgentSessionRequest and use AgenticGameService
         var agentRequest = new AgentSessionRequest
         {
             Prompt = request.Prompt,
+            Source = request.Source ?? "web",
+            Author = request.Author ?? "anonymous",
             UserId = request.UserId,
             MaxIterations = request.MaxIterations,
             UseTestClient = false // Interactive mode uses main client

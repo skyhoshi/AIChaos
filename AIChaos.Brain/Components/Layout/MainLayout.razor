@@ -23,11 +23,17 @@
 
 @code {
     private Account? currentAccount;
+    private bool _isInitialized = false;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (firstRender && !_isInitialized)
         {
+            _isInitialized = true;
+            
+            // Add a small delay to ensure SignalR circuit is fully connected
+            await Task.Delay(100);
+            
             await LoadAccount();
         }
     }
@@ -49,8 +55,10 @@
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
+            // Log error but don't throw - this prevents circuit crashes
+            Console.WriteLine($"Error loading account: {ex.Message}");
             currentAccount = null;
         }
 

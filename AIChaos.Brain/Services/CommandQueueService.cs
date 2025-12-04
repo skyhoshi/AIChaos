@@ -259,6 +259,18 @@ public class CommandQueueService
     }
     
     /// <summary>
+    /// Queues an existing command for execution.
+    /// </summary>
+    public void QueueCommand(CommandEntry command)
+    {
+        lock (_lock)
+        {
+            _queue.Add((command.Id, command.ExecutionCode));
+            OnHistoryChanged();
+        }
+    }
+    
+    /// <summary>
     /// Reports the execution result from GMod.
     /// </summary>
     public bool ReportExecutionResult(int commandId, bool success, string? error)
