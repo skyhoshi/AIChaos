@@ -41,6 +41,7 @@ builder.Services.AddSingleton<QueueSlotService>();
 builder.Services.AddSingleton<AiCodeGeneratorService>();
 builder.Services.AddSingleton<AccountService>();
 builder.Services.AddSingleton<RefundService>();
+builder.Services.AddSingleton<CurrencyConversionService>();
 builder.Services.AddSingleton<TwitchService>();
 builder.Services.AddSingleton<YouTubeService>();
 builder.Services.AddSingleton<TunnelService>();

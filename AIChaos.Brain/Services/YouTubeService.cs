@@ -16,6 +16,7 @@ public partial class YouTubeService : IDisposable
     private readonly CommandQueueService _commandQueue;
     private readonly AiCodeGeneratorService _codeGenerator;
     private readonly AccountService _accountService;
+    private readonly CurrencyConversionService _currencyConverter;
     private readonly ILogger<YouTubeService> _logger;
 
     private Google.Apis.YouTube.v3.YouTubeService? _youtubeService;
@@ -32,12 +33,14 @@ public partial class YouTubeService : IDisposable
         CommandQueueService commandQueue,
         AiCodeGeneratorService codeGenerator,
         AccountService accountService,
+        CurrencyConversionService currencyConverter,
         ILogger<YouTubeService> logger)
     {
         _settingsService = settingsService;
         _commandQueue = commandQueue;
         _codeGenerator = codeGenerator;
         _accountService = accountService;
+        _currencyConverter = currencyConverter;
         _logger = logger;
     }
     
@@ -220,7 +223,7 @@ public partial class YouTubeService : IDisposable
         }
     }
 
-    private void ProcessMessageAsync(LiveChatMessage message)
+    private async void ProcessMessageAsync(LiveChatMessage message)
     {
         var settings = _settingsService.Settings.YouTube;
         var snippet = message.Snippet;
@@ -243,29 +246,37 @@ public partial class YouTubeService : IDisposable
 
         // Check for Super Chat
         var isSuperChat = snippet.Type == "superChatEvent" || snippet.Type == "superStickerEvent";
-        decimal superChatAmount = 0;
+        decimal superChatAmountUsd = 0;
+        string? currencyCode = null;
+        decimal originalAmount = 0;
 
         if (isSuperChat && snippet.SuperChatDetails != null)
         {
-            superChatAmount = (decimal)(snippet.SuperChatDetails.AmountMicros ?? 0) / 1_000_000m;
+            // Get the amount in the original currency (converted from micros)
+            originalAmount = (decimal)(snippet.SuperChatDetails.AmountMicros ?? 0) / 1_000_000m;
+            currencyCode = snippet.SuperChatDetails.Currency;
+            
+            // Convert to USD
+            superChatAmountUsd = await _currencyConverter.ConvertToUsdAsync(originalAmount, currencyCode ?? "USD");
+            
             messageText = snippet.SuperChatDetails.UserComment ?? messageText;
         }
 
         // Only process Super Chats for credits
-        if (!isSuperChat || superChatAmount < settings.MinSuperChatAmount)
+        if (!isSuperChat || superChatAmountUsd < settings.MinSuperChatAmount)
         {
             return;
         }
 
-        _logger.LogInformation("[YouTube] Super Chat from {Username} ({ChannelId}): ${Amount}",
-            username, channelId, superChatAmount);
+        // Log with currency conversion details
+        var conversionDesc = _currencyConverter.GetConversionDescription(originalAmount, currencyCode ?? "USD", superChatAmountUsd);
+        _logger.LogInformation("[YouTube] Super Chat from {Username} ({ChannelId}): {ConversionDesc}",
+            username, channelId, conversionDesc);
         
-        // Add credits - this will go to the account if linked, or store as pending if not
+        // Add credits based on USD amount - this will go to the account if linked, or store as pending if not
         try
         {
-            _accountService.AddCreditsToChannel(channelId, superChatAmount, username, messageText);
-            // Note: Legacy UserService credits are handled separately through AddCreditsToChannel
-            // when an account is not linked, to avoid double-crediting
+            _accountService.AddCreditsToChannel(channelId, superChatAmountUsd, username, messageText);
         }
         catch (Exception ex)
         {
