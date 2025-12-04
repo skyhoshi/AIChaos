@@ -93,4 +93,18 @@ Console.WriteLine($"  MODERATION PASSWORD: {settingsService.ModerationPassword}"
 Console.WriteLine("  (Password changes each session)");
 Console.WriteLine("========================================");
 
+// Register shutdown handler to stop tunnels when server closes
+var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+var tunnelService = app.Services.GetRequiredService<TunnelService>();
+lifetime.ApplicationStopping.Register(() =>
+{
+    Console.WriteLine("Server shutting down...");
+    if (tunnelService.IsRunning)
+    {
+        Console.WriteLine("Stopping tunnel...");
+        tunnelService.Stop();
+        Console.WriteLine("Tunnel stopped.");
+    }
+});
+
 app.Run("http://0.0.0.0:5000");
