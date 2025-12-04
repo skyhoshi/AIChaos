@@ -690,7 +690,10 @@
         {
             history = CommandQueue.GetHistory().OrderByDescending(c => c.Timestamp).ToList();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to load history: {ex.Message}");
+        }
         StateHasChanged();
     }
 
