@@ -85,7 +85,7 @@ If you need to configure OAuth credentials first:
 
 **Google Verification Process:**
 - [Submit for verification](https://support.google.com/cloud/answer/9110914)
-- Typically takes 2-4 weeks
+- Verification timeline varies and may take several weeks
 - Removes 100 user limit completely
 - Allows unlimited OAuth logins
 - Recommended if you expect 100+ concurrent viewers
