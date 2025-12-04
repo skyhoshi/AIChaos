@@ -47,36 +47,39 @@ public class StreamPanelController : ControllerBase
         try
         {
             var client = _httpClientFactory.CreateClient();
-            var tokenResponse = await client.PostAsync(
-                "https://oauth2.googleapis.com/token",
-                new FormUrlEncodedContent(new Dictionary<string, string>
-                {
-                    ["client_id"] = settings.ClientId,
-                    ["client_secret"] = settings.ClientSecret,
-                    ["code"] = code,
-                    ["grant_type"] = "authorization_code",
-                    ["redirect_uri"] = redirectUri
-                }));
-            
-            if (!tokenResponse.IsSuccessStatusCode)
+            using (var content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
-                var errorContent = await tokenResponse.Content.ReadAsStringAsync();
-                _logger.LogError("YouTube token exchange failed: {Error}", errorContent);
-                return Redirect($"/dashboard/stream?error=Failed to exchange authorization code for access token");
+                ["client_id"] = settings.ClientId,
+                ["client_secret"] = settings.ClientSecret,
+                ["code"] = code,
+                ["grant_type"] = "authorization_code",
+                ["redirect_uri"] = redirectUri
+            }))
+            {
+                var tokenResponse = await client.PostAsync(
+                    "https://oauth2.googleapis.com/token",
+                    content);
+                
+                if (!tokenResponse.IsSuccessStatusCode)
+                {
+                    var errorContent = await tokenResponse.Content.ReadAsStringAsync();
+                    _logger.LogError("YouTube token exchange failed: {Error}", errorContent);
+                    return Redirect($"/dashboard/stream?error=Failed to exchange authorization code for access token");
+                }
+                
+                var tokenJson = await tokenResponse.Content.ReadAsStringAsync();
+                var tokenData = JsonDocument.Parse(tokenJson);
+                
+                settings.AccessToken = tokenData.RootElement.GetProperty("access_token").GetString() ?? "";
+                settings.RefreshToken = tokenData.RootElement.TryGetProperty("refresh_token", out var rt)
+                    ? rt.GetString() ?? ""
+                    : "";
+                
+                _settingsService.UpdateYouTube(settings);
+                _logger.LogInformation("YouTube OAuth successful");
+                
+                return Redirect("/dashboard/stream?success=YouTube authorization successful! You can now use YouTube features.");
             }
-            
-            var tokenJson = await tokenResponse.Content.ReadAsStringAsync();
-            var tokenData = JsonDocument.Parse(tokenJson);
-            
-            settings.AccessToken = tokenData.RootElement.GetProperty("access_token").GetString() ?? "";
-            settings.RefreshToken = tokenData.RootElement.TryGetProperty("refresh_token", out var rt)
-                ? rt.GetString() ?? ""
-                : "";
-            
-            _settingsService.UpdateYouTube(settings);
-            _logger.LogInformation("YouTube OAuth successful");
-            
-            return Redirect("/dashboard/stream?success=YouTube authorization successful! You can now use YouTube features.");
         }
         catch (Exception ex)
         {

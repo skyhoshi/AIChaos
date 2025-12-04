@@ -124,18 +124,14 @@ public class QueueSlotService
     {
         var now = DateTime.UtcNow;
         
-        foreach (var slot in _slots)
-        {
-            // Check if slot is not occupied or has passed its block time
-            if (!slot.IsOccupied || 
-                (now - slot.LastExecutionTime).TotalSeconds >= DefaultSlotBlockSeconds)
-            {
+        return _slots
+            .Where(slot => !slot.IsOccupied || 
+                          (now - slot.LastExecutionTime).TotalSeconds >= DefaultSlotBlockSeconds)
+            .Select(slot => {
                 slot.IsOccupied = false; // Free it if time has passed
                 return slot;
-            }
-        }
-        
-        return null;
+            })
+            .FirstOrDefault();
     }
     
     /// <summary>

@@ -223,7 +223,7 @@ public partial class YouTubeService : IDisposable
         }
     }
 
-    private async void ProcessMessageAsync(LiveChatMessage message)
+    private async Task ProcessMessageAsync(LiveChatMessage message)
     {
         var settings = _settingsService.Settings.YouTube;
         var snippet = message.Snippet;
