@@ -15,8 +15,7 @@ builder.Services.AddOpenApi();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | 
-                               ForwardedHeaders.XForwardedProto | 
-                               ForwardedHeaders.XForwardedPrefix;
+                               ForwardedHeaders.XForwardedProto;
     options.KnownNetworks.Clear();
     options.KnownProxies.Clear();
 });
@@ -68,6 +67,17 @@ var app = builder.Build();
 
 // Use forwarded headers - MUST be before other middleware
 app.UseForwardedHeaders();
+
+// Handle X-Forwarded-Prefix from nginx for subdirectory deployment
+app.Use(async (context, next) =>
+{
+    var forwardedPrefix = context.Request.Headers["X-Forwarded-Prefix"].FirstOrDefault();
+    if (!string.IsNullOrEmpty(forwardedPrefix))
+    {
+        context.Request.PathBase = forwardedPrefix;
+    }
+    await next();
+});
 
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
