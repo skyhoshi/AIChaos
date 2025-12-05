@@ -333,10 +333,20 @@ else
         // Refresh UI every 2 seconds to check stream state
         streamStateRefreshTimer = new System.Threading.Timer(async _ =>
         {
-            await InvokeAsync(() =>
+            try
             {
-                StateHasChanged();
-            });
+                await InvokeAsync(() =>
+                {
+                    if (!_isInitialized)
+                        return;
+                    
+                    StateHasChanged();
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error refreshing stream state: {ex.Message}");
+            }
         }, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
     }
 
@@ -350,6 +360,8 @@ else
         
         // Stop stream state refresh
         streamStateRefreshTimer?.Dispose();
+        
+        _isInitialized = false;
     }
 
     private async Task SubmitCommand()
