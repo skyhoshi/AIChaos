@@ -705,15 +705,12 @@
     {
         try
         {
-            // Use tunnel URL if available (for public callback), otherwise fall back to current navigation base URI
-            var baseUrl = !string.IsNullOrEmpty(SettingsService.Settings.Tunnel.CurrentUrl) 
-                ? SettingsService.Settings.Tunnel.CurrentUrl 
-                : Navigation.BaseUri;
-                
-            // Ensure baseUrl ends with /
-            if (!baseUrl.EndsWith("/")) baseUrl += "/";
+            // Build the full callback URL including any path base from reverse proxy
+            var baseUrl = Navigation.BaseUri.TrimEnd('/');
+            var redirectUri = $"{baseUrl}/api/setup/youtube/callback";
             
-            var redirectUri = $"{baseUrl}api/setup/youtube/callback";
+            Console.WriteLine($"[YouTube OAuth] Redirect URI: {redirectUri}");
+            
             var authUrl = YouTubeService.GetAuthorizationUrl(redirectUri);
 
             if (!string.IsNullOrEmpty(authUrl))
