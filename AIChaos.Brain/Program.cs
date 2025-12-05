@@ -2,6 +2,7 @@ using AIChaos.Brain.Models;
 using AIChaos.Brain.Services;
 using AIChaos.Brain.Components;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -9,6 +10,16 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
+
+// Configure forwarded headers for reverse proxy support
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | 
+                               ForwardedHeaders.XForwardedProto | 
+                               ForwardedHeaders.XForwardedPrefix;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 // Configure HttpClient with base address for Blazor components
 builder.Services.AddHttpClient();
@@ -54,6 +65,9 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// Use forwarded headers - MUST be before other middleware
+app.UseForwardedHeaders();
 
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
