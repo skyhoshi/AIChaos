@@ -72,14 +72,9 @@
             Console.WriteLine($"Error loading account: {ex.Message}");
             
             // Fallback to anonymous account if NOT in stream mode (i.e., in single user mode)
-            if (!SettingsService.Settings.General.StreamMode)
-            {
-                currentAccount = AccountService.GetOrCreateAnonymousAccount();
-            }
-            else
-            {
-                currentAccount = null;
-            }
+            currentAccount = !SettingsService.Settings.General.StreamMode
+                ? AccountService.GetOrCreateAnonymousAccount()
+                : null;
         }
 
         await InvokeAsync(StateHasChanged);

@@ -55,24 +55,33 @@ public class AccountService
             return account;
         }
 
-        // Create the anonymous account
-        account = new Account
+        lock (_lock)
         {
-            Id = ANONYMOUS_USER_ID,
-            Username = "anonymous",
-            DisplayName = "Anonymous User",
-            CreditBalance = decimal.MaxValue, // Unlimited credits
-            CreatedAt = DateTime.UtcNow,
-            Role = UserRole.User
-        };
+            // Double-check after acquiring lock
+            if (_accounts.TryGetValue(ANONYMOUS_USER_ID, out account))
+            {
+                return account;
+            }
 
-        _accounts[ANONYMOUS_USER_ID] = account;
-        _usernameIndex["anonymous"] = ANONYMOUS_USER_ID;
-        SaveAccounts();
+            // Create the anonymous account
+            account = new Account
+            {
+                Id = ANONYMOUS_USER_ID,
+                Username = "anonymous",
+                DisplayName = "Anonymous User",
+                CreditBalance = decimal.MaxValue, // Unlimited credits
+                CreatedAt = DateTime.UtcNow,
+                Role = UserRole.User
+            };
 
-        _logger.LogInformation("[ACCOUNT] Created anonymous account for single-user mode");
+            _accounts[ANONYMOUS_USER_ID] = account;
+            _usernameIndex["anonymous"] = ANONYMOUS_USER_ID;
+            SaveAccounts();
 
-        return account;
+            _logger.LogInformation("[ACCOUNT] Created anonymous account for single-user mode");
+
+            return account;
+        }
     }
 
     /// <summary>
@@ -97,8 +106,8 @@ public class AccountService
             return (false, "Username already taken", null);
         }
         
-        // First account created becomes admin
-        var isFirstAccount = _accounts.Count == 0;
+        // First non-anonymous account created becomes admin
+        var isFirstAccount = _accounts.Count == 0 || (_accounts.Count == 1 && _accounts.ContainsKey(ANONYMOUS_USER_ID));
         
         var account = new Account
         {
@@ -638,7 +647,10 @@ public class AccountService
     /// </summary>
     public List<Account> GetAllAccounts()
     {
-        return _accounts.Values.OrderBy(a => a.CreatedAt).ToList();
+        return _accounts.Values
+            .Where(a => a.Id != ANONYMOUS_USER_ID)
+            .OrderBy(a => a.CreatedAt)
+            .ToList();
     }
 
     /// <summary>
@@ -736,13 +748,10 @@ public class AccountService
                 account.Username, account.CreditBalance);
             
             // Deduct credits NOW (before moderation) - skip in single user mode
-            if (!isSingleUserMode)
+            if (!isSingleUserMode && !DeductCredits(accountId, Constants.CommandCost))
             {
-                if (!DeductCredits(accountId, Constants.CommandCost))
-                {
-                    _logger.LogError("[SUBMIT] Failed to deduct credits from {Username}", account.Username);
-                    return (false, "Failed to deduct credits", null, account.CreditBalance);
-                }
+                _logger.LogError("[SUBMIT] Failed to deduct credits from {Username}", account.Username);
+                return (false, "Failed to deduct credits", null, account.CreditBalance);
             }
             
             var updatedAccount = _accounts[accountId];
@@ -791,12 +800,9 @@ public class AccountService
         var (executionCode, undoCode) = await codeGenerator(prompt);
 
         // Deduct credits - skip in single user mode
-        if (!isSingleUserMode)
+        if (!isSingleUserMode && !DeductCredits(accountId, Constants.CommandCost))
         {
-            if (!DeductCredits(accountId, Constants.CommandCost))
-            {
-                return (false, "Failed to deduct credits", null, account.CreditBalance);
-            }
+            return (false, "Failed to deduct credits", null, account.CreditBalance);
         }
 
         // Add to command queue
@@ -865,13 +871,10 @@ public class AccountService
                 account.Username, account.CreditBalance);
             
             // Deduct credits NOW (before moderation) - skip in single user mode
-            if (!isSingleUserMode)
+            if (!isSingleUserMode && !DeductCredits(accountId, Constants.CommandCost))
             {
-                if (!DeductCredits(accountId, Constants.CommandCost))
-                {
-                    _logger.LogError("[INTERACTIVE] Failed to deduct credits from {Username}", account.Username);
-                    return (false, "Failed to deduct credits", null, account.CreditBalance);
-                }
+                _logger.LogError("[INTERACTIVE] Failed to deduct credits from {Username}", account.Username);
+                return (false, "Failed to deduct credits", null, account.CreditBalance);
             }
             
             var updatedAccount = _accounts[accountId];
@@ -919,12 +922,9 @@ public class AccountService
         // For interactive mode without images, just deduct credits and let the session proceed
         // The interactive session will handle code generation
         // Skip credit deduction in single user mode
-        if (!isSingleUserMode)
+        if (!isSingleUserMode && !DeductCredits(accountId, Constants.CommandCost))
         {
-            if (!DeductCredits(accountId, Constants.CommandCost))
-            {
-                return (false, "Failed to deduct credits", null, account.CreditBalance);
-            }
+            return (false, "Failed to deduct credits", null, account.CreditBalance);
         }
 
         var finalAccount = _accounts[accountId];
