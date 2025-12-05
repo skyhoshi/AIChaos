@@ -289,6 +289,7 @@ else
     private int selectedCommandIdForRefund = 0;
     private string selectedRefundReason = "";
     private bool _isInitialized = false;
+    private System.Threading.Timer? streamStateRefreshTimer = null;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -305,6 +306,9 @@ else
         
         // Subscribe to history changes
         CommandQueue.HistoryChanged += OnHistoryChanged;
+        
+        // Start stream state refresh timer
+        StartStreamStateRefresh();
     }
 
     private async void OnHistoryChanged(object? sender, EventArgs e)
@@ -323,6 +327,18 @@ else
             }
         });
     }
+    
+    private void StartStreamStateRefresh()
+    {
+        // Refresh UI every 2 seconds to check stream state
+        streamStateRefreshTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(() =>
+            {
+                StateHasChanged();
+            });
+        }, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
+    }
 
     public void Dispose()
     {
@@ -331,6 +347,9 @@ else
         
         // Stop interactive polling if active
         interactivePollingTimer?.Dispose();
+        
+        // Stop stream state refresh
+        streamStateRefreshTimer?.Dispose();
     }
 
     private async Task SubmitCommand()

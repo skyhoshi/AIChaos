@@ -286,24 +286,6 @@
         margin-left: 8px;
     }
 
-    .status-badge {
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 12px;
-        font-weight: bold;
-        margin-left: 10px;
-    }
-
-    .status-connected {
-        background: var(--success);
-        color: #000;
-    }
-
-    .status-disconnected {
-        background: var(--error);
-        color: #fff;
-    }
-
     .image-list,
     .refund-list,
     .history-list {
@@ -453,6 +435,9 @@
     // Queue Status
     private bool autoRefreshQueueStatus = true;
     private System.Threading.Timer? queueStatusRefreshTimer;
+    
+    // Stream state refresh
+    private System.Threading.Timer? streamStateRefreshTimer;
 
     protected override async Task OnInitializedAsync()
     {
@@ -475,6 +460,9 @@
         
         // Start auto-refresh for queue status by default
         StartAutoRefreshQueueStatus();
+        
+        // Start auto-refresh for stream state
+        StartStreamStateRefresh();
     }
 
     private async Task LoadAll()
@@ -572,6 +560,31 @@
     {
         queueStatusRefreshTimer?.Dispose();
         queueStatusRefreshTimer = null;
+    }
+
+    private void StartStreamStateRefresh()
+    {
+        if (streamStateRefreshTimer == null)
+        {
+            streamStateRefreshTimer = new System.Threading.Timer(async _ =>
+            {
+                await InvokeAsync(() =>
+                {
+                    var newState = YouTubeService.IsListening;
+                    if (newState != isStreamActive)
+                    {
+                        isStreamActive = newState;
+                        StateHasChanged();
+                    }
+                });
+            }, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
+        }
+    }
+
+    private void StopStreamStateRefresh()
+    {
+        streamStateRefreshTimer?.Dispose();
+        streamStateRefreshTimer = null;
     }
 
     private void LoadVideoId()
@@ -1023,6 +1036,7 @@
         imageRefreshTimer?.Dispose();
         historyRefreshTimer?.Dispose();
         queueStatusRefreshTimer?.Dispose();
+        streamStateRefreshTimer?.Dispose();
         blastMessageCts?.Cancel();
         blastMessageCts?.Dispose();
         videoMessageCts?.Cancel();
