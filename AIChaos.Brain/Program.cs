@@ -73,7 +73,7 @@ app.Use(async (context, next) =>
     var forwardedPrefix = context.Request.Headers["X-Forwarded-Prefix"].FirstOrDefault();
     if (!string.IsNullOrEmpty(forwardedPrefix))
     {
-        Console.WriteLine($"[DEBUG] Received X-Forwarded-Prefix: {forwardedPrefix}");
+        //Console.WriteLine($"[DEBUG] Received X-Forwarded-Prefix: {forwardedPrefix}");
         context.Request.PathBase = forwardedPrefix;
         
         // Also need to strip the prefix from the path if nginx didn't
@@ -82,7 +82,7 @@ app.Use(async (context, next) =>
             context.Request.Path = remainder;
         }
         
-        Console.WriteLine($"[DEBUG] PathBase: {context.Request.PathBase}, Path: {context.Request.Path}");
+        //Console.WriteLine($"[DEBUG] PathBase: {context.Request.PathBase}, Path: {context.Request.Path}");
     }
     await next();
 });
@@ -114,11 +114,11 @@ Console.WriteLine("  Chaos Brain - C# Edition");
 Console.WriteLine("========================================");
 Console.WriteLine($"  Viewer: http://localhost:5000/");
 Console.WriteLine("  Dashboard: http://localhost:5000/dashboard");
-Console.WriteLine("  Setup: http://localhost:5000/setup");
-Console.WriteLine("  History: http://localhost:5000/history");
-Console.WriteLine("  Moderation: http://localhost:5000/moderation");
+Console.WriteLine("  Setup: http://localhost:5000/dashboard/setup");
+Console.WriteLine("  History: http://localhost:5000/dashboard/history");
+Console.WriteLine("  Moderation: http://localhost:5000/dashboard/moderation");
 Console.WriteLine("========================================");
-Console.WriteLine($"  MODERATION PASSWORD: {settingsService.ModerationPassword}");
+Console.WriteLine($"  MODERATION PASSWORD: {settingsService.ModerationPassword} (OBSOLETE)");
 Console.WriteLine("  (Password changes each session)");
 Console.WriteLine("========================================");
 
