@@ -12,8 +12,8 @@
     </SubtitleContent>
 </Header>
 
-@* Only show AccountBar if not in single user mode *@
-@if (!SettingsService.Settings.General.SingleUserMode)
+@* Show AccountBar if logged in user (not anonymous) OR not in single user mode *@
+@if (!SettingsService.Settings.General.SingleUserMode || (currentAccount != null && currentAccount.Id != "anonymous-default-user"))
 {
     <AccountBar CurrentAccount="@currentAccount" OnAccountChanged="@LoadAccount" />
 }
@@ -47,25 +47,23 @@
     {
         try
         {
-            // If in single user mode, use the anonymous account
-            if (SettingsService.Settings.General.SingleUserMode)
+            // Always check for session token first (for admin/moderator access)
+            var sessionToken = await JS.InvokeAsync<string>("localStorage.getItem", "sessionToken");
+            if (!string.IsNullOrEmpty(sessionToken))
+            {
+                // Validate session token with AccountService
+                currentAccount = AccountService.GetAccountBySession(sessionToken);
+                if (currentAccount == null)
+                {
+                    // Session expired or invalid, clear localStorage
+                    await JS.InvokeVoidAsync("localStorage.removeItem", "sessionToken");
+                }
+            }
+
+            // If no session and in single user mode, use the anonymous account
+            if (currentAccount == null && SettingsService.Settings.General.SingleUserMode)
             {
                 currentAccount = AccountService.GetOrCreateAnonymousAccount();
-            }
-            else
-            {
-                // Get session token from localStorage (secure approach)
-                var sessionToken = await JS.InvokeAsync<string>("localStorage.getItem", "sessionToken");
-                if (!string.IsNullOrEmpty(sessionToken))
-                {
-                    // Validate session token with AccountService
-                    currentAccount = AccountService.GetAccountBySession(sessionToken);
-                    if (currentAccount == null)
-                    {
-                        // Session expired or invalid, clear localStorage
-                        await JS.InvokeVoidAsync("localStorage.removeItem", "sessionToken");
-                    }
-                }
             }
         }
         catch (Exception ex)
