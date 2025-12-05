@@ -205,6 +205,67 @@ To let viewers send Ideas (like through YouTube Super Chats), you need a public 
 2. In the Setup page, click **"Start bore"**
 3. Your public URL will appear!
 
+### External Hosting (Recommended for Streamers) ⭐
+
+**This is the ideal method for streamers!** Instead of running tunnels on your local machine, host the Brain server on a separate server (VPS, cloud instance, or another PC) and point your GMod installation to it.
+
+**Why this is better for streaming:**
+- ✅ **No tunneling software needed** - Direct connection to your server
+- ✅ **Better performance** - No tunnel overhead or session limits
+- ✅ **Always available** - Server stays up 24/7 even when you're not streaming
+- ✅ **Separation of concerns** - Game runs on your PC, Brain runs elsewhere
+- ✅ **Easier setup** - Just set one URL in a text file
+
+**How to set it up:**
+
+1. Deploy the Brain server to your VPS/cloud server (AWS, DigitalOcean, etc.)
+   ```bash
+   # On your server
+   cd AIChaos.Brain
+   dotnet run --urls "http://0.0.0.0:5000"
+   ```
+   > ⚠️ **Production tip**: For public deployments, set up a reverse proxy (nginx/caddy) with HTTPS instead of exposing port 5000 directly.
+
+2. Configure network access:
+   - **For testing/local network**: Make sure port 5000 is accessible from your gaming PC
+   - **For production/public use**: Set up a reverse proxy (nginx/caddy) with HTTPS on ports 80/443, keep port 5000 firewalled to localhost only
+
+3. In your **GMod addons folder** on your gaming PC, create a file:
+   ```
+   addons/AIChaos/tunnel_url.txt
+   ```
+
+4. Put your server's URL in the file (without `/poll`):
+   ```
+   https://your-server.example.com
+   ```
+   or if using HTTP with a non-standard port (local network/testing only):
+   ```
+   http://your-server-ip:5000
+   ```
+   > 💡 **Note**: When using standard HTTP ports (80/443), don't specify the port in the URL.
+
+5. Restart Garry's Mod - it will automatically connect to your external server!
+
+**Security recommendations:**
+- 🔒 **Use HTTPS in production** - Set up a reverse proxy (nginx/caddy) with SSL certificates (use Let's Encrypt for free SSL). The proxy should listen on ports 80/443 and forward to localhost:5000.
+- 🔒 **Firewall configuration** - Keep port 80/443 open for viewer submissions. Port 5000 should only be accessible from localhost when using a reverse proxy.
+- 🔒 **Set admin password** - Protect the dashboard from unauthorized access (configured on first visit)
+- 🔒 **Monitor the History tab** - Keep an eye on submitted Ideas for abuse
+
+> ⚠️ **Security Notes**:
+> - **Local testing**: Binding to 0.0.0.0:5000 is acceptable for local network testing without public access
+> - **Production deployment**: Use nginx/caddy with HTTPS on standard ports (80/443) and keep port 5000 firewalled to localhost only
+> - **Port configuration**: Only expose 80/443 publicly; the reverse proxy handles SSL and forwards to localhost:5000
+
+**Example cloud providers:**
+- **DigitalOcean** - Simple droplets starting at $6/month
+- **AWS Lightsail** - Easy VPS hosting
+- **Linode** - Affordable cloud instances
+- **Oracle Cloud** - Free tier available
+
+> 💡 **Tip**: You can run the Brain on a separate PC in your home network too! Just use the PC's local IP address (e.g., `http://192.168.1.100:5000`).
+
 ### Other Options
 
 **LocalTunnel** is another free option (requires Node.js):
