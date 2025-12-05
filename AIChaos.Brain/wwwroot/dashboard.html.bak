@@ -3,82 +3,143 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Chaos Control</title>
+    <title>AI Chaos Dashboard (Admin)</title>
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎮 AI CHAOS CONTROL</h1>
-            <p>Control GMod through AI-powered chat commands</p>
+            <h1>🎮 AI CHAOS DASHBOARD</h1>
+            <p>Admin Control Panel - Direct GMod Control</p>
         </div>
         
         <div class="nav">
-            <a href="/" class="nav-link active">⚡ Control Panel</a>
+            <a href="/" class="nav-link">👥 Viewer</a>
+            <a href="/dashboard" class="nav-link active">⚡ Dashboard</a>
             <a href="/setup" class="nav-link">🔧 Setup</a>
             <a href="/history" class="nav-link">📜 History</a>
+            <a href="/moderation" class="nav-link">🛡️ Moderation</a>
         </div>
         
-        <div class="card">
-            <h2>Send Chaos Command</h2>
-            <div class="form-group">
-                <textarea id="promptInput" placeholder="Ex: Make everyone tiny, Spawn 10 headcrabs, Turn the screen upside down..."></textarea>
-            </div>
-            
-            <div class="form-group" style="margin-bottom: 15px;">
-                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                    <input type="checkbox" id="interactiveMode" style="width: 18px; height: 18px;">
-                    <span>🔄 Interactive Mode</span>
-                    <span style="color: var(--text-dim); font-size: 12px;">(AI can search models, test code, and fix errors automatically)</span>
-                </label>
-            </div>
-            
-            <button id="sendBtn" onclick="sendPrompt()">⚡ SEND CHAOS</button>
-            
-            <div id="status" style="margin-top: 15px;"></div>
-            
-            <div id="interactiveStatus" class="hidden" style="margin-top: 15px; padding: 15px; background: rgba(0,255,0,0.1); border-radius: 8px; position: relative;">
-                <button id="dismissInteractive" onclick="dismissInteractiveStatus()" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 1px solid var(--text-dim); color: var(--text-dim); padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">✕ Dismiss</button>
-                <h4 style="margin: 0 0 10px 0;">🔄 Interactive Session <span id="sessionStatus"></span></h4>
-                <div id="interactivePhase">Phase: <span class="phase-badge">Starting...</span></div>
-                <div id="interactiveIteration">Iteration: <span>0/5</span></div>
-                <div id="interactiveSteps" style="margin-top: 10px;"></div>
-            </div>
-            
-            <div id="testClientStatus" class="hidden" style="margin-top: 15px; padding: 15px; background: rgba(255,165,0,0.1); border-radius: 8px; position: relative;">
-                <button onclick="dismissTestClientStatus()" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 1px solid var(--text-dim); color: var(--text-dim); padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">✕ Dismiss</button>
-                <h4 style="margin: 0 0 10px 0;">🧪 Test Client <span id="testClientSessionStatus"></span></h4>
-                <div id="testClientPrompt" style="margin-bottom: 10px; color: var(--text-dim); font-size: 12px;"></div>
-                <div id="testClientPhase">Status: <span class="phase-badge">Queued for testing...</span></div>
-                <div id="testClientAttempt">Attempt: <span>0/3</span></div>
-                <div id="testClientSteps" style="margin-top: 10px;"></div>
+        <!-- Login Screen -->
+        <div id="loginScreen" class="login-container">
+            <div class="card">
+                <h2>🔒 Admin Access Required</h2>
+                <div id="loginAlert"></div>
+                <div id="loginForm">
+                    <div class="form-group">
+                        <label>Admin Password</label>
+                        <input type="password" id="loginPassword" placeholder="Enter admin password" onkeydown="if(event.key==='Enter')login()">
+                    </div>
+                    <button onclick="login()">🔓 Login</button>
+                </div>
             </div>
         </div>
         
-        <div class="card">
-            <h2>📋 Recent Commands</h2>
-            <div id="recentCommands">
-                <div class="empty-state">Commands will appear here...</div>
+        <!-- Dashboard Content (hidden until logged in) -->
+        <div id="dashboardContent" class="hidden">
+            <div class="card">
+                <h2>Send Chaos Command</h2>
+                <div class="form-group">
+                    <textarea id="promptInput" placeholder="Ex: Make everyone tiny, Spawn 10 headcrabs, Turn the screen upside down..."></textarea>
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" id="interactiveMode" style="width: 18px; height: 18px;">
+                        <span>🔄 Interactive Mode</span>
+                        <span style="color: var(--text-dim); font-size: 12px;">(AI can search models, test code, and fix errors automatically)</span>
+                    </label>
+                </div>
+                
+                <button id="sendBtn" onclick="sendPrompt()">⚡ SEND CHAOS</button>
+                
+                <div id="status" style="margin-top: 15px;"></div>
+                
+                <div id="interactiveStatus" class="hidden" style="margin-top: 15px; padding: 15px; background: rgba(0,255,0,0.1); border-radius: 8px; position: relative;">
+                    <button id="dismissInteractive" onclick="dismissInteractiveStatus()" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 1px solid var(--text-dim); color: var(--text-dim); padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">✕ Dismiss</button>
+                    <h4 style="margin: 0 0 10px 0;">🔄 Interactive Session <span id="sessionStatus"></span></h4>
+                    <div id="interactivePhase">Phase: <span class="phase-badge">Starting...</span></div>
+                    <div id="interactiveIteration">Iteration: <span>0/5</span></div>
+                    <div id="interactiveSteps" style="margin-top: 10px;"></div>
+                </div>
+                
+                <div id="testClientStatus" class="hidden" style="margin-top: 15px; padding: 15px; background: rgba(255,165,0,0.1); border-radius: 8px; position: relative;">
+                    <button onclick="dismissTestClientStatus()" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 1px solid var(--text-dim); color: var(--text-dim); padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">✕ Dismiss</button>
+                    <h4 style="margin: 0 0 10px 0;">🧪 Test Client <span id="testClientSessionStatus"></span></h4>
+                    <div id="testClientPrompt" style="margin-bottom: 10px; color: var(--text-dim); font-size: 12px;"></div>
+                    <div id="testClientPhase">Status: <span class="phase-badge">Queued for testing...</span></div>
+                    <div id="testClientAttempt">Attempt: <span>0/3</span></div>
+                    <div id="testClientSteps" style="margin-top: 10px;"></div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>📋 Recent Commands</h2>
+                <div id="recentCommands">
+                    <div class="empty-state">Commands will appear here...</div>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        const statusDiv = document.getElementById('status');
-        const promptInput = document.getElementById('promptInput');
-        const sendBtn = document.getElementById('sendBtn');
+        let isLoggedIn = false;
+        let adminPassword = '';
         
-        // Generate or retrieve a unique user ID for this browser
-        function getUserId() {
-            let userId = localStorage.getItem('aichaos_user_id');
-            if (!userId) {
-                userId = 'user_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
-                localStorage.setItem('aichaos_user_id', userId);
+        // Check if already logged in (from setup page)
+        window.onload = async function() {
+            // Check if admin is configured
+            try {
+                const response = await fetch('/api/setup/admin/status');
+                const data = await response.json();
+                
+                if (!data.isConfigured) {
+                    showLoginAlert('Admin password not set. Please configure it in Setup first.', 'warning');
+                    document.getElementById('loginForm').innerHTML = '<a href="/setup" class="btn">Go to Setup</a>';
+                }
+            } catch (err) {
+                showLoginAlert('Failed to check admin status', 'error');
             }
-            return userId;
+        };
+        
+        function showLoginAlert(message, type) {
+            const container = document.getElementById('loginAlert');
+            container.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
         }
         
-        const userId = getUserId();
+        async function login() {
+            const password = document.getElementById('loginPassword').value;
+            
+            try {
+                const response = await fetch('/api/setup/admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    adminPassword = password;
+                    showDashboardContent();
+                } else {
+                    showLoginAlert(data.message || 'Invalid password', 'error');
+                }
+            } catch (err) {
+                showLoginAlert('Network error', 'error');
+            }
+        }
+        
+        function showDashboardContent() {
+            isLoggedIn = true;
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('dashboardContent').classList.remove('hidden');
+            loadRecentCommands();
+        }
+        
+        // Admin user ID for dashboard commands
+        const userId = 'admin_dashboard';
         let currentInteractiveSessionId = null;
         let interactivePollingInterval = null;
         let currentMaxIterations = 5;
@@ -87,10 +148,13 @@
             const el = document.createElement('div');
             el.className = 'log-entry ' + type;
             el.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-            statusDiv.prepend(el);
+            const statusDiv = document.getElementById('status');
+            if (statusDiv) statusDiv.prepend(el);
         }
         
         async function sendPrompt() {
+            const promptInput = document.getElementById('promptInput');
+            const sendBtn = document.getElementById('sendBtn');
             const text = promptInput.value.trim();
             if (!text) return;
             
@@ -106,7 +170,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                        prompt: text, 
+                        prompt: text,
                         userId: userId,
                         maxIterations: 5
                     })
@@ -138,10 +202,12 @@
                 resetSendButton();
             }
             
-            promptInput.value = '';
+            document.getElementById('promptInput').value = '';
         }
         
         function resetSendButton() {
+            const promptInput = document.getElementById('promptInput');
+            const sendBtn = document.getElementById('sendBtn');
             promptInput.disabled = false;
             sendBtn.disabled = false;
             sendBtn.textContent = "⚡ SEND CHAOS";

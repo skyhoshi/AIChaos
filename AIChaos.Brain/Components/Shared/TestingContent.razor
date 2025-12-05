@@ -1,0 +1,358 @@
+@inject TestClientService TestClientService
+@inject AccountService AccountService
+@inject CurrencyConversionService CurrencyConverter
+@inject IJSRuntime JS
+
+<div id="alerts">
+    @if (!string.IsNullOrEmpty(alertMessage))
+    {
+        <div class="alert alert-@alertType">@alertMessage</div>
+    }
+</div>
+
+<!-- Super Chat Simulator -->
+<div class="card">
+    <h2>💰 Super Chat Simulator</h2>
+    <p style="color: var(--text-dim); margin-bottom: 15px;">
+        Simulate a YouTube Super Chat to add credits to a user's account for testing.
+    </p>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>Username</label>
+            <input type="text" @bind="superChatUserId" placeholder="e.g., testuser123">
+            <small>The user's account username (they can find this on the viewer page top-right)</small>
+        </div>
+        <div class="form-group">
+            <label>Display Name</label>
+            <input type="text" @bind="superChatDisplayName" placeholder="e.g., TestUser">
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label>Amount</label>
+            <input type="number" @bind="superChatAmount" @bind:after="UpdateSuperChatConversion" min="0.01" step="0.01">
+        </div>
+        <div class="form-group">
+            <label>Currency</label>
+            <select @bind="superChatCurrency" @bind:after="UpdateSuperChatConversion">
+                <option value="USD">USD - US Dollar</option>
+                <option value="EUR">EUR - Euro</option>
+                <option value="GBP">GBP - British Pound</option>
+                <option value="JPY">JPY - Japanese Yen</option>
+                <option value="CAD">CAD - Canadian Dollar</option>
+                <option value="AUD">AUD - Australian Dollar</option>
+                <option value="CNY">CNY - Chinese Yuan</option>
+                <option value="KRW">KRW - South Korean Won</option>
+                <option value="INR">INR - Indian Rupee</option>
+                <option value="BRL">BRL - Brazilian Real</option>
+                <option value="MXN">MXN - Mexican Peso</option>
+                <option value="RUB">RUB - Russian Ruble</option>
+                <option value="ZAR">ZAR - South African Rand</option>
+                <option value="SEK">SEK - Swedish Krona</option>
+                <option value="NOK">NOK - Norwegian Krone</option>
+                <option value="DKK">DKK - Danish Krone</option>
+                <option value="CHF">CHF - Swiss Franc</option>
+                <option value="PLN">PLN - Polish Złoty</option>
+                <option value="THB">THB - Thai Baht</option>
+                <option value="SGD">SGD - Singapore Dollar</option>
+            </select>
+        </div>
+    </div>
+    @if (!string.IsNullOrEmpty(superChatConversion))
+    {
+        <div style="color: var(--info); margin-bottom: 15px; font-size: 14px;">
+            💱 @superChatConversion
+        </div>
+    }
+
+    <button @onclick="SimulateSuperChat">💵 Simulate Super Chat</button>
+    @if (!string.IsNullOrEmpty(superChatResult))
+    {
+        <div style="margin-top: 10px;">
+            <div class="alert alert-@superChatResultType">@superChatResult</div>
+        </div>
+    }
+</div>
+
+<!-- YouTube API Simulator -->
+<div class="card">
+    <h2>📺 YouTube API Simulator</h2>
+    <p style="color: var(--text-dim); margin-bottom: 15px;">
+        Simulate a raw YouTube API Super Chat callback for testing channel linking and pending credits.
+    </p>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>YouTube Channel ID</label>
+            <input type="text" @bind="ytApiChannelId" placeholder="UC...">
+            <small>The YouTube channel ID (not username)</small>
+        </div>
+        <div class="form-group">
+            <label>Display Name</label>
+            <input type="text" @bind="ytApiDisplayName" placeholder="Channel Name">
+        </div>
+    </div>
+    <div class="form-group">
+        <label>Message (Optional)</label>
+        <input type="text" @bind="ytApiMessage" placeholder="Optional message or LINK-CODE">
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label>Amount</label>
+            <input type="number" @bind="ytApiAmount" @bind:after="UpdateYtApiConversion" min="0.01" step="0.01">
+        </div>
+        <div class="form-group">
+            <label>Currency</label>
+            <select @bind="ytApiCurrency" @bind:after="UpdateYtApiConversion">
+                <option value="USD">USD - US Dollar</option>
+                <option value="EUR">EUR - Euro</option>
+                <option value="GBP">GBP - British Pound</option>
+                <option value="JPY">JPY - Japanese Yen</option>
+                <option value="CAD">CAD - Canadian Dollar</option>
+                <option value="AUD">AUD - Australian Dollar</option>
+                <option value="CNY">CNY - Chinese Yuan</option>
+                <option value="KRW">KRW - South Korean Won</option>
+                <option value="INR">INR - Indian Rupee</option>
+                <option value="BRL">BRL - Brazilian Real</option>
+                <option value="MXN">MXN - Mexican Peso</option>
+                <option value="RUB">RUB - Russian Ruble</option>
+                <option value="ZAR">ZAR - South African Rand</option>
+                <option value="SEK">SEK - Swedish Krona</option>
+                <option value="NOK">NOK - Norwegian Krone</option>
+                <option value="DKK">DKK - Danish Krone</option>
+                <option value="CHF">CHF - Swiss Franc</option>
+                <option value="PLN">PLN - Polish Złoty</option>
+                <option value="THB">THB - Thai Baht</option>
+                <option value="SGD">SGD - Singapore Dollar</option>
+            </select>
+        </div>
+    </div>
+    @if (!string.IsNullOrEmpty(ytApiConversion))
+    {
+        <div style="color: var(--info); margin-bottom: 15px; font-size: 14px;">
+            💱 @ytApiConversion
+        </div>
+    }
+
+    <button @onclick="SimulateYouTubeApi">📺 Simulate YouTube API Call</button>
+    @if (!string.IsNullOrEmpty(ytApiResult))
+    {
+        <div style="margin-top: 10px;">
+            <div class="alert alert-@ytApiResultType">@ytApiResult</div>
+        </div>
+    }
+</div>
+
+<style>
+    .form-row {
+        display: flex;
+        gap: 20px;
+    }
+
+    .form-row .form-group {
+        flex: 1;
+    }
+</style>
+
+@code {
+    private string alertMessage = "";
+    private string alertType = "info";
+
+    // Super Chat Simulator
+    private string superChatUserId = "";
+    private string superChatDisplayName = "";
+    private decimal superChatAmount = 5.00m;
+    private string superChatCurrency = "USD";
+    private string superChatConversion = "";
+    private string superChatResult = "";
+    private string superChatResultType = "info";
+
+    // YouTube API Simulator
+    private string ytApiChannelId = "";
+    private string ytApiDisplayName = "";
+    private string ytApiMessage = "";
+    private decimal ytApiAmount = 5.00m;
+    private string ytApiCurrency = "USD";
+    private string ytApiConversion = "";
+    private string ytApiResult = "";
+    private string ytApiResultType = "info";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await UpdateSuperChatConversion();
+        await UpdateYtApiConversion();
+    }
+
+    private async Task UpdateSuperChatConversion()
+    {
+        if (superChatAmount <= 0)
+        {
+            superChatConversion = "";
+            return;
+        }
+
+        try
+        {
+            var usdAmount = await CurrencyConverter.ConvertToUsdAsync(superChatAmount, superChatCurrency);
+            superChatConversion = CurrencyConverter.GetConversionDescription(superChatAmount, superChatCurrency, usdAmount);
+            
+            if (!superChatCurrency.Equals("USD", StringComparison.OrdinalIgnoreCase))
+            {
+                superChatConversion += $" → User will receive ${usdAmount:F2} in credits";
+            }
+            else
+            {
+                superChatConversion = $"User will receive ${usdAmount:F2} in credits";
+            }
+        }
+        catch
+        {
+            superChatConversion = "";
+        }
+    }
+
+    private async Task UpdateYtApiConversion()
+    {
+        if (ytApiAmount <= 0)
+        {
+            ytApiConversion = "";
+            return;
+        }
+
+        try
+        {
+            var usdAmount = await CurrencyConverter.ConvertToUsdAsync(ytApiAmount, ytApiCurrency);
+            ytApiConversion = CurrencyConverter.GetConversionDescription(ytApiAmount, ytApiCurrency, usdAmount);
+            
+            if (!ytApiCurrency.Equals("USD", StringComparison.OrdinalIgnoreCase))
+            {
+                ytApiConversion += $" → User will receive ${usdAmount:F2} in credits";
+            }
+            else
+            {
+                ytApiConversion = $"User will receive ${usdAmount:F2} in credits";
+            }
+        }
+        catch
+        {
+            ytApiConversion = "";
+        }
+    }
+
+    private async Task SimulateSuperChat()
+    {
+        if (string.IsNullOrWhiteSpace(superChatUserId))
+        {
+            superChatResult = "User ID is required";
+            superChatResultType = "error";
+            return;
+        }
+
+        if (superChatAmount <= 0)
+        {
+            superChatResult = "Amount must be positive";
+            superChatResultType = "error";
+            return;
+        }
+
+        try
+        {
+            var displayName = string.IsNullOrWhiteSpace(superChatDisplayName) ? "Simulated User" : superChatDisplayName;
+            
+            // Get the account first
+            var account = AccountService.GetAccount(superChatUserId);
+            if (account == null)
+            {
+                superChatResult = $"Account not found: {superChatUserId}";
+                superChatResultType = "error";
+                return;
+            }
+            
+            // Convert to USD
+            var usdAmount = await CurrencyConverter.ConvertToUsdAsync(superChatAmount, superChatCurrency);
+            var conversionDesc = CurrencyConverter.GetConversionDescription(superChatAmount, superChatCurrency, usdAmount);
+            
+            // Add credits directly to the account (USD amount)
+            AccountService.AddCredits(account.Id, usdAmount);
+            
+            // Simulate the result
+            var result = TestClientService.SimulateSuperChat(superChatUserId, displayName, usdAmount);
+
+            if (result.Success)
+            {
+                var updatedAccount = AccountService.GetAccount(superChatUserId);
+                superChatResult = $"✓ {conversionDesc}. New balance: ${updatedAccount?.CreditBalance ?? 0:F2}";
+                superChatResultType = "success";
+            }
+            else
+            {
+                superChatResult = result.Message ?? "Simulation failed";
+                superChatResultType = "error";
+            }
+        }
+        catch (Exception ex)
+        {
+            superChatResult = $"Error: {ex.Message}";
+            superChatResultType = "error";
+        }
+    }
+
+    private async Task SimulateYouTubeApi()
+    {
+        if (string.IsNullOrWhiteSpace(ytApiChannelId))
+        {
+            ytApiResult = "YouTube Channel ID is required";
+            ytApiResultType = "error";
+            return;
+        }
+
+        if (ytApiAmount <= 0)
+        {
+            ytApiResult = "Amount must be positive";
+            ytApiResultType = "error";
+            return;
+        }
+
+        try
+        {
+            var displayName = string.IsNullOrWhiteSpace(ytApiDisplayName) ? "Test User" : ytApiDisplayName;
+            
+            // Convert to USD
+            var usdAmount = await CurrencyConverter.ConvertToUsdAsync(ytApiAmount, ytApiCurrency);
+            var conversionDesc = CurrencyConverter.GetConversionDescription(ytApiAmount, ytApiCurrency, usdAmount);
+            
+            // Add credits to the YouTube channel (will add to account if linked, or store as pending)
+            AccountService.AddCreditsToChannel(ytApiChannelId, usdAmount, displayName, ytApiMessage);
+            
+            // Simulate the result
+            var result = TestClientService.SimulateYouTubeApi(ytApiChannelId, displayName, ytApiMessage, usdAmount);
+
+            if (result.Success)
+            {
+                // Check if channel is linked
+                var account = AccountService.GetAccountByYouTubeChannel(ytApiChannelId);
+                if (account != null)
+                {
+                    ytApiResult = $"✓ {conversionDesc}. Credits added to linked account: {account.Username} (Balance: ${account.CreditBalance:F2})";
+                }
+                else
+                {
+                    var pending = AccountService.GetPendingCreditsForChannel(ytApiChannelId);
+                    ytApiResult = $"✓ {conversionDesc}. Channel not linked - stored as pending credits: ${pending:F2}";
+                }
+                ytApiResultType = "success";
+            }
+            else
+            {
+                ytApiResult = result.Message ?? "Simulation failed";
+                ytApiResultType = "error";
+            }
+        }
+        catch (Exception ex)
+        {
+            ytApiResult = $"Error: {ex.Message}";
+            ytApiResultType = "error";
+        }
+    }
+}

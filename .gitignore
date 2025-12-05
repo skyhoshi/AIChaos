@@ -3,7 +3,10 @@ sightengine_keys.txt
 openrouter_api_key.txt
 settings.json
 
-# Saved Payloads (user data)
+# User data
+users.json
+accounts.json
+pending_credits.json
 saved_payloads/
 
 # .NET build artifacts
@@ -37,3 +40,4 @@ venv/
 *.log
 logs/
 tunnel_url.txt
+.backup

@@ -1,0 +1,39 @@
+@using Microsoft.AspNetCore.Components
+@inject NavigationManager NavManager
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="@NavManager.BaseUri" />
+    <link rel="stylesheet" href="css/style.css" />
+    <HeadOutlet @rendermode="InteractiveServer" />
+</head>
+
+<body>
+    <Routes @rendermode="InteractiveServer" />
+    <script src="_framework/blazor.web.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script>
+        // Global reference for AccountBar component
+        window.accountBarRef = null;
+        
+        // Set AccountBar reference from Blazor
+        window.setAccountBarReference = function(dotNetRef) {
+            window.accountBarRef = dotNetRef;
+        };
+        
+        // Google Sign-In callback
+        window.handleGoogleCallback = function(response) {
+            if (window.accountBarRef) {
+                window.accountBarRef.invokeMethodAsync('HandleGoogleSignInCallback', response.credential)
+                    .catch(err => console.error('Error calling HandleGoogleSignInCallback:', err));
+            } else {
+                console.error('AccountBar reference not set');
+            }
+        };
+    </script>
+</body>
+
+</html>

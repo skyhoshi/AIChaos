@@ -1,8 +1,8 @@
-# 🎮 AI Chaos - Let Chat Control Your Game!
+# 🎮 Chaos - Let Your Audience Control Your Game!
 
-AI Chaos is a fun system that lets Twitch/YouTube chat (or anyone) send commands to your Garry's Mod game using AI. The AI turns natural language like "make everyone tiny" into actual game code!
+Chaos is a stream-ready system that lets viewers send creative "Ideas" to control your Garry's Mod game! Using advanced code generation, it turns natural language like "make everyone tiny" into actual game code.
 
-> **Perfect for streamers** who want to let their audience cause chaos in their game! 💥
+> **Perfect for streamers** who want to create an interactive, chaotic experience with their audience! 💥
 
 ---
 
@@ -31,12 +31,12 @@ Before starting, make sure you have:
 |------------|------|-------------|
 | **.NET 9.0 SDK** | Runs the Brain server | [Download](https://dotnet.microsoft.com/download) |
 | **Garry's Mod** | The game you're controlling | [Steam](https://store.steampowered.com/app/4000/Garrys_Mod/) |
-| **OpenRouter API Key** | Powers the AI (free tier available) | [Get one](https://openrouter.ai/keys) |
+| **OpenRouter API Key** | Powers the code generation (free tier available) | [Get one](https://openrouter.ai/keys) |
 | **A web browser** | For the control panel | You have one! |
 
 **Optional but recommended:**
-- **ngrok** or **bore** - To let people access your server from the internet
-- **Twitch/YouTube account** - For chat integration
+- **ngrok** or **bore** - To let viewers access your server from the internet
+- **YouTube account** - For Super Chat integration ($1 per Idea)
 
 ---
 
@@ -91,17 +91,17 @@ cd AIChaos
 
 ## Step 3: Get Your OpenRouter API Key
 
-OpenRouter is the service that provides AI access. It's free to start!
+OpenRouter is the service that provides code generation access. It's free to start!
 
 1. Go to [openrouter.ai](https://openrouter.ai/)
 2. Click **"Sign Up"** (you can use Google, GitHub, or email)
 3. Once logged in, go to [openrouter.ai/keys](https://openrouter.ai/keys)
 4. Click **"Create Key"**
-5. Give it a name like "AI Chaos"
+5. Give it a name like "Chaos"
 6. **Copy the key** - it looks like `sk-or-v1-xxxxxxxxxxxxxxxx`
 7. **Save it somewhere** - you'll need it in Step 5!
 
-> 💡 **Tip:** OpenRouter gives you free credits to start. After that, costs depend on the AI model you choose.
+> 💡 **Tip:** OpenRouter gives you free credits to start. After that, costs depend on the model you choose.
 
 ---
 
@@ -122,11 +122,10 @@ The "Brain" is the server that receives commands and generates game code.
 You should see:
 ```
 ========================================
-  AI Chaos Brain - C# Edition
+  Chaos Brain - C# Edition
 ========================================
   Control Panel: http://localhost:5000/
-  Setup: http://localhost:5000/setup
-  History: http://localhost:5000/history
+  Dashboard: http://localhost:5000/dashboard
 ========================================
 ```
 
@@ -137,13 +136,14 @@ You should see:
 ## Step 5: Configure in Browser
 
 1. Open your web browser
-2. Go to **http://localhost:5000/setup**
-3. **Set an admin password** (first time only) - this protects your setup page
-4. Enter your **OpenRouter API Key** from Step 3
-5. Choose an AI model (Claude Sonnet is recommended for best results)
-6. Click **Save**
+2. Go to **http://localhost:5000/dashboard**
+3. Click on the **"Setup"** tab
+4. **Set an admin password** (first time only) - this protects your dashboard
+5. Enter your **OpenRouter API Key** from Step 3
+6. Choose a code generator model (Claude Sonnet is recommended for best results)
+7. Click **Save**
 
-> 🔒 The password protects the setup and history pages from public access.
+> 🔒 The password protects the dashboard from public access while keeping the main submission page open for viewers.
 
 ---
 
@@ -180,7 +180,7 @@ The GMod addon is already included! You just need to put it in the right place.
 
 **If you're only testing locally, skip this step!**
 
-To let others send commands (like Twitch chat), you need a public URL. The easiest way:
+To let viewers send Ideas (like through YouTube Super Chats), you need a public URL. The easiest way:
 
 ### Using ngrok (Recommended)
 
@@ -190,7 +190,7 @@ To let others send commands (like Twitch chat), you need a public URL. The easie
    ```bash
    ngrok authtoken YOUR_TOKEN_HERE
    ```
-4. In the Setup page (http://localhost:5000/setup), click **"Start ngrok"**
+4. In the Dashboard → Setup page, click **"Start ngrok"**
 5. Your public URL will appear - share this with your audience!
 
 ### Using bore (No Account Needed)
@@ -205,6 +205,67 @@ To let others send commands (like Twitch chat), you need a public URL. The easie
 2. In the Setup page, click **"Start bore"**
 3. Your public URL will appear!
 
+### External Hosting (Recommended for Streamers) ⭐
+
+**This is the ideal method for streamers!** Instead of running tunnels on your local machine, host the Brain server on a separate server (VPS, cloud instance, or another PC) and point your GMod installation to it.
+
+**Why this is better for streaming:**
+- ✅ **No tunneling software needed** - Direct connection to your server
+- ✅ **Better performance** - No tunnel overhead or session limits
+- ✅ **Always available** - Server stays up 24/7 even when you're not streaming
+- ✅ **Separation of concerns** - Game runs on your PC, Brain runs elsewhere
+- ✅ **Easier setup** - Just set one URL in a text file
+
+**How to set it up:**
+
+1. Deploy the Brain server to your VPS/cloud server (AWS, DigitalOcean, etc.)
+   ```bash
+   # On your server
+   cd AIChaos.Brain
+   dotnet run --urls "http://0.0.0.0:5000"
+   ```
+   > ⚠️ **Production tip**: For public deployments, set up a reverse proxy (nginx/caddy) with HTTPS instead of exposing port 5000 directly.
+
+2. Configure network access:
+   - **For testing/local network**: Make sure port 5000 is accessible from your gaming PC
+   - **For production/public use**: Set up a reverse proxy (nginx/caddy) with HTTPS on ports 80/443, keep port 5000 firewalled to localhost only
+
+3. In your **GMod addons folder** on your gaming PC, create a file:
+   ```
+   addons/AIChaos/tunnel_url.txt
+   ```
+
+4. Put your server's URL in the file (without `/poll`):
+   ```
+   https://your-server.example.com
+   ```
+   or if using HTTP with a non-standard port (local network/testing only):
+   ```
+   http://your-server-ip:5000
+   ```
+   > 💡 **Note**: When using standard HTTP ports (80/443), don't specify the port in the URL.
+
+5. Restart Garry's Mod - it will automatically connect to your external server!
+
+**Security recommendations:**
+- 🔒 **Use HTTPS in production** - Set up a reverse proxy (nginx/caddy) with SSL certificates (use Let's Encrypt for free SSL). The proxy should listen on ports 80/443 and forward to localhost:5000.
+- 🔒 **Firewall configuration** - Keep port 80/443 open for viewer submissions. Port 5000 should only be accessible from localhost when using a reverse proxy.
+- 🔒 **Set admin password** - Protect the dashboard from unauthorized access (configured on first visit)
+- 🔒 **Monitor the History tab** - Keep an eye on submitted Ideas for abuse
+
+> ⚠️ **Security Notes**:
+> - **Local testing**: Binding to 0.0.0.0:5000 is acceptable for local network testing without public access
+> - **Production deployment**: Use nginx/caddy with HTTPS on standard ports (80/443) and keep port 5000 firewalled to localhost only
+> - **Port configuration**: Only expose 80/443 publicly; the reverse proxy handles SSL and forwards to localhost:5000
+
+**Example cloud providers:**
+- **DigitalOcean** - Simple droplets starting at $6/month
+- **AWS Lightsail** - Easy VPS hosting
+- **Linode** - Affordable cloud instances
+- **Oracle Cloud** - Free tier available
+
+> 💡 **Tip**: You can run the Brain on a separate PC in your home network too! Just use the PC's local IP address (e.g., `http://192.168.1.100:5000`).
+
 ### Other Options
 
 **LocalTunnel** is another free option (requires Node.js):
@@ -217,33 +278,33 @@ Note: LocalTunnel shows a password page on first access.
 
 ---
 
-## Step 8: Connect Twitch/YouTube (Optional)
+## Step 8: Connect YouTube (Optional)
 
-### Twitch Setup
+### YouTube Super Chat Integration
 
-1. Go to [dev.twitch.tv/console](https://dev.twitch.tv/console)
-2. Create a new application:
-   - **Name:** Something like "AI Chaos"
-   - **OAuth Redirect URL:** `http://localhost:5000/api/setup/twitch/callback`
-   - **Category:** Game Integration
-3. Copy the **Client ID** and **Client Secret**
-4. In the Setup page, enter these and click **"Login with Twitch"**
-5. Set your channel name and cooldown settings
-6. Click **"Start Listening"**
+Chaos features a streamlined YouTube integration with $1 per Idea pricing:
 
-### YouTube Setup
+1. Go to Dashboard → **Stream Control** tab
+2. Click **"🔗 Login with YouTube"**
+3. Authorize the app with your YouTube account
+4. Enter your live stream's **Video ID** 
+5. Click **"Save Video ID"** (automatically starts listening)
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project
-3. Enable the **YouTube Data API v3**
-4. Create OAuth 2.0 credentials:
-   - **Application type:** Web Application
-   - **Redirect URI:** `http://localhost:5000/api/setup/youtube/callback`
-5. Copy the **Client ID** and **Client Secret**
-6. In the Setup page, enter these and click **"Login with YouTube"**
-7. Enter your live stream's **Video ID** and click **"Start Listening"**
+**Viewer Experience:**
+- Viewers can donate $1 via Super Chat to send an Idea
+- Each dollar = 1 Idea submission
+- Credits are "invisible" - balance only shows when clicking profile
+- Button shows "Send Chaos" with no price displayed
+- When out of credits: "You'll need to donate again to send another"
 
-> 📖 See [YOUTUBE_SETUP.md](YOUTUBE_SETUP.md) for detailed YouTube instructions.
+**For Viewers:**
+- Go to your public URL
+- Click "Get a Link Code" if not logged in
+- Send the code in YouTube chat to link their channel
+- Donate via Super Chat ($1 minimum per Idea)
+- Credits appear automatically and can be used to submit Ideas
+
+> 📖 See [YOUTUBE_SETUP.md](YOUTUBE_SETUP.md) for detailed YouTube OAuth setup instructions.
 
 ---
 
@@ -256,13 +317,13 @@ Note: LocalTunnel shows a password page on first access.
 
 2. Open **http://localhost:5000/** in your browser
 
-3. Type a command like: **"Make everyone tiny for 10 seconds"**
+3. Type an Idea like: **"Make everyone tiny for 10 seconds"**
 
-4. Click **Submit**
+4. Click **Send Chaos**
 
 5. Watch your game - characters should shrink!
 
-### Example Commands to Try
+### Example Ideas to Try
 - "Make everyone tiny"
 - "Spawn 5 headcrabs in front of the player"
 - "Make the screen shake"
@@ -286,13 +347,13 @@ Note: LocalTunnel shows a password page on first access.
 
 ### GMod shows "Connection Failed"
 - Is the Brain server running?
-- Check the URL in `ai_chaos_controller.lua`
+- Check the URL in `chaos_controller.lua`
 - Firewall might be blocking the connection
 
-### Commands not working in game
+### Ideas not working in game
 - Open GMod console (`~`) and look for errors
 - Make sure you're actually in a game, not the menu
-- Check the History page (http://localhost:5000/history) for errors
+- Check the History tab in Dashboard for errors
 
 ### "Invalid API key"
 - Double-check your OpenRouter API key
@@ -310,14 +371,31 @@ Note: LocalTunnel shows a password page on first access.
 
 | URL | What it does |
 |-----|--------------|
-| http://localhost:5000/ | Control Panel - Send commands here |
-| http://localhost:5000/setup | Setup Page - Configure API keys, tunnel, integrations |
-| http://localhost:5000/history | History - See past commands, undo them, repeat them |
+| http://localhost:5000/ | Public submission page - Send Ideas here |
+| http://localhost:5000/dashboard | Dashboard - Stream Control, Setup, History, Moderation |
+
+**Dashboard Tabs:**
+- **Stream Control** - All-in-one streaming hub (default landing page)
+  - Queue control with manual blast (Admin only)
+  - YouTube video ID & OAuth (Admin only)  
+  - Incoming links moderation
+  - Refund requests
+  - Recent command history with undo/save
+- **Setup** - Configure API keys, models, OAuth, tunnels
+- **Commands** - Browse and trigger saved payloads
+- **History** - Full command history with detailed controls
+- **Moderation** - Review and moderate pending submissions
+- **Users** - Manage user accounts and balances (Admin only)
+- **Testing** - Test mode for development (Admin only)
+
+**Role-Based Access:**
+- **Moderators**: Can access Stream Control, Commands, History, Moderation
+- **Admins**: Full access to all features including Setup and Users
 
 | Folder/File | Purpose |
 |-------------|---------|
 | `AIChaos.Brain/` | The server that handles everything |
-| `lua/autorun/ai_chaos_controller.lua` | GMod addon that receives commands |
+| `lua/autorun/chaos_controller.lua` | GMod addon that receives commands |
 | `ngrok_url.txt` | Created when you start a tunnel |
 
 | Command | What it does |
@@ -332,9 +410,30 @@ Note: LocalTunnel shows a password page on first access.
 
 - [COMMAND_HISTORY_GUIDE.md](COMMAND_HISTORY_GUIDE.md) - How to use the history/undo system
 - [TUNNEL_COMPARISON.md](TUNNEL_COMPARISON.md) - Compare ngrok, bore, and other tunnels
-- [YOUTUBE_SETUP.md](YOUTUBE_SETUP.md) - Detailed YouTube integration guide
+- [YOUTUBE_SETUP.md](YOUTUBE_SETUP.md) - Detailed YouTube OAuth integration guide
 - [NGROK_LAUNCHER_README.md](NGROK_LAUNCHER_README.md) - ngrok auto-launcher details
-- [AIChaos.Brain/README.md](AIChaos.Brain/README.md) - Technical details about the Brain
+- [AIChaos.Brain/README.md](AIChaos.Brain/README.md) - Technical details about the Brain server
+
+## ⚡ StreamReady Features
+
+This version includes the complete **StreamReady Update** with:
+
+- **💵 $1 per Idea pricing** - Simple, transparent economy
+- **👻 Invisible economy UX** - Balance hidden from main interface, shown only in profile
+- **🎛️ Slot-based queue** - Dynamic pacing (3-10 concurrent slots based on demand)
+- **📊 Unified Stream Control** - All-in-one dashboard for streaming
+- **🔐 Role-based access** - Moderator vs Admin permissions
+- **🔗 Universal URL moderation** - Review all links, not just images
+- **📱 Mobile responsive** - Horizontal scrolling tabs for mobile
+- **✨ Real-time feedback** - Instant notifications for account linking
+
+### Queue System Details
+
+The slot-based queue replaces traditional FIFO with dynamic pacing:
+- **Low volume (0-5 in queue)**: 3 slots → steady "drip feed"
+- **High volume (50+ in queue)**: 10 slots → "absolute chaos" mode
+- **25-second slot timer**: Independent of effect duration for consistent pacing
+- **Manual blast**: Admins can bypass queue limits instantly (1-10 commands)
 
 ---
 

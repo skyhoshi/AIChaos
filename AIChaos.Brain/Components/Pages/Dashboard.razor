@@ -1,0 +1,510 @@
+@page "/dashboard"
+@page "/dashboard/{SubPage?}"
+@rendermode InteractiveServer
+@inject SettingsService Settings
+@inject CommandQueueService CommandQueue
+@inject QueueSlotService QueueSlots
+@inject AiCodeGeneratorService CodeGenerator
+@inject AccountService AccountService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject HttpClient Http
+@using AIChaos.Brain.Components.Layout
+@using AIChaos.Brain.Components.Shared
+
+<PageTitle>Chaos Dashboard</PageTitle>
+
+<SectionContent SectionId="PageSections.Title">🎮 CHAOS DASHBOARD</SectionContent>
+<SectionContent SectionId="PageSections.Subtitle">@GetSubtitle()</SectionContent>
+
+@if (currentAccount == null)
+{
+    <div class="login-container">
+        <div class="card">
+            <h2>🔒 Login Required</h2>
+            <p style="color: var(--text-dim); margin-bottom: 20px;">Dashboard access requires an account. The first account
+                created is automatically an admin.</p>
+            @if (!string.IsNullOrEmpty(loginAlert))
+            {
+                <div class="alert alert-@loginAlertType">@loginAlert</div>
+            }
+            <p>Please log in from the <a href="/" style="color: var(--accent);">Viewer page</a>.</p>
+        </div>
+    </div>
+}
+else if (currentAccount.Role < UserRole.Moderator)
+{
+    <div class="login-container">
+        <div class="card">
+            <h2>⛔ Access Denied</h2>
+            <p>Dashboard access requires Moderator or Admin privileges.</p>
+            <p>Contact an administrator to request access.</p>
+        </div>
+    </div>
+}
+else
+{
+    <!-- Admin/Moderator Subtabs -->
+    <div class="admin-tabs">
+        <button class="admin-tab @(activeSubPage == "stream" ? "active" : "")"
+        @onclick='() => NavigateToSubPage("stream")'>
+            🎬 Stream Control
+        </button>
+        <button class="admin-tab @(activeSubPage == "commands" ? "active" : "")"
+        @onclick='() => NavigateToSubPage("commands")'>
+            ⚡ Commands
+        </button>
+        @if (currentAccount.Role == UserRole.Admin)
+        {
+            <button class="admin-tab @(activeSubPage == "setup" ? "active" : "")" @onclick='() => NavigateToSubPage("setup")'>
+                🔧 Setup
+            </button>
+        }
+        <button class="admin-tab @(activeSubPage == "history" ? "active" : "")"
+        @onclick='() => NavigateToSubPage("history")'>
+            📜 History
+        </button>
+        <button class="admin-tab @(activeSubPage == "moderation" ? "active" : "")"
+        @onclick='() => NavigateToSubPage("moderation")'>
+            🛡️ Moderation
+        </button>
+        @if (currentAccount.Role == UserRole.Admin)
+        {
+            <button class="admin-tab @(activeSubPage == "users" ? "active" : "")" @onclick='() => NavigateToSubPage("users")'>
+                👥 Users
+            </button>
+            <button class="admin-tab @(activeSubPage == "testing" ? "active" : "")"
+            @onclick='() => NavigateToSubPage("testing")'>
+                🧪 Testing
+            </button>
+        }
+    </div>
+
+    @if (activeSubPage == "stream")
+    {
+        <StreamControlContent CurrentAccount="@currentAccount" />
+    }
+    else if (activeSubPage == "commands")
+    {
+        <!-- Commands Tab Content (original Dashboard content) -->
+        <div class="card">
+            <h2>Send Your Idea</h2>
+            <p style="color: var(--text-dim); font-size: 14px; margin-bottom: 15px;">Admin mode - no credits required. Each dollar gets viewers one Idea.</p>
+            <div class="form-group">
+                <textarea @bind="promptInput"
+                    placeholder="Ex: Make everyone tiny, Spawn 10 headcrabs, Turn the screen upside down..."></textarea>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <input type="checkbox" @bind="interactiveMode" style="width: 18px; height: 18px;">
+                    <span>🔄 Interactive Mode</span>
+                    <span style="color: var(--text-dim); font-size: 12px;">(AI can search models, test code, and fix errors
+                        automatically)</span>
+                </label>
+            </div>
+
+            <div style="display: flex; gap: 10px; align-items: flex-end;">
+                <button @onclick="SendPrompt" disabled="@isSubmitting" style="flex: 1;">
+                    @if (isSubmitting)
+                    {
+                        <span>⏳ SENDING...</span>
+                    }
+                    else
+                    {
+                        <span>⚡ SEND CHAOS</span>
+                    }
+                </button>
+                
+                <div style="display: flex; gap: 5px; align-items: center;">
+                    <input type="number" @bind="blastCount" min="1" max="10" 
+                           style="width: 60px; padding: 10px; text-align: center;" 
+                           title="Number of commands to blast" />
+                    <button @onclick="ManualBlast" class="btn-warning" style="white-space: nowrap; padding: 0 20px;">
+                        💥 BLAST QUEUE
+                    </button>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(statusMessage))
+            {
+                <div style="margin-top: 15px;">
+                    <div class="alert alert-@statusType">@statusMessage</div>
+                </div>
+            }
+        </div>
+
+        <div class="card">
+            <h2>📋 Recent Ideas</h2>
+            <div>
+                @if (recentCommands == null || !recentCommands.Any())
+                {
+                    <div class="empty-state">Ideas will appear here...</div>
+                }
+                else
+                {
+                    @foreach (var cmd in recentCommands)
+                    {
+                        <div class="history-item">
+                            <div style="flex: 1;">
+                                <div class="history-time">@cmd.Timestamp.ToLocalTime().ToString("HH:mm:ss")</div>
+                                <div class="history-prompt">@cmd.UserPrompt</div>
+                                @if (!string.IsNullOrEmpty(cmd.AiResponse))
+                                {
+                                    <div class="history-response">💬 @cmd.AiResponse</div>
+                                }
+                            </div>
+                            <span class="history-source">@cmd.Source</span>
+                            <span class="history-status status-@GetStatusClass(cmd.Status)">@GetStatusText(cmd.Status)</span>
+                            <div class="history-actions">
+                                <button @onclick="() => RepeatCommand(cmd.Id)" class="btn-info btn-small">🔁</button>
+                                <button @onclick="() => UndoCommand(cmd.Id)" class="btn-warning btn-small">↩</button>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    }
+    else if (activeSubPage == "setup")
+    {
+        <SetupContent />
+    }
+    else if (activeSubPage == "history")
+    {
+        <HistoryContent />
+    }
+    else if (activeSubPage == "moderation")
+    {
+        <ModerationContent />
+    }
+    else if (activeSubPage == "users")
+    {
+        <UserManagementContent />
+    }
+    else if (activeSubPage == "testing")
+    {
+        <TestingContent />
+    }
+}
+
+<style>
+    .login-container {
+        max-width: 500px;
+        margin: 50px auto;
+    }
+
+    .history-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        margin-bottom: 10px;
+        gap: 10px;
+    }
+
+    .history-time {
+        color: var(--text-dim);
+        font-size: 12px;
+    }
+
+    .history-prompt {
+        color: var(--text);
+        margin: 5px 0;
+    }
+
+    .history-response {
+        color: var(--info);
+        font-size: 12px;
+        margin-top: 5px;
+    }
+
+    .history-source {
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    .history-status {
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+    }
+
+    .status-pending {
+        background: #888;
+    }
+
+    .status-queued {
+        background: #f0ad4e;
+    }
+
+    .status-executed {
+        background: #5cb85c;
+    }
+
+    .status-undone {
+        background: #5bc0de;
+    }
+
+    .status-failed {
+        background: #d9534f;
+    }
+
+    .history-actions {
+        display: flex;
+        gap: 5px;
+    }
+
+    /* Admin Subtabs */
+    .admin-tabs {
+        display: flex;
+        gap: 10px;
+        margin: 20px 0;
+        border-bottom: 2px solid var(--bg-darker);
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+    }
+    
+    .admin-tabs::-webkit-scrollbar {
+        height: 6px;
+    }
+    
+    .admin-tabs::-webkit-scrollbar-track {
+        background: var(--bg-darker);
+    }
+    
+    .admin-tabs::-webkit-scrollbar-thumb {
+        background: var(--accent);
+        border-radius: 3px;
+    }
+
+    .admin-tab {
+        background: none;
+        border: none;
+        color: var(--text-dim);
+        padding: 12px 20px;
+        cursor: pointer;
+        font-size: 16px;
+        transition: all 0.2s;
+        border-bottom: 3px solid transparent;
+        margin-bottom: -2px;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    .admin-tab:hover {
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    .admin-tab.active {
+        color: var(--accent);
+        border-bottom-color: var(--accent);
+    }
+</style>
+
+@code {
+    [Parameter]
+    public string? SubPage { get; set; }
+
+    private string activeSubPage = "stream";
+    [CascadingParameter]
+    private Account? currentAccount { get; set; }
+
+    private string loginAlert = "";
+    private string loginAlertType = "error";
+    private string promptInput = "";
+    private bool interactiveMode = false;
+    private bool isSubmitting = false;
+    private List<CommandEntry>? recentCommands;
+    private string statusMessage = "";
+    private string statusType = "info";
+    private int blastCount = 1;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (currentAccount != null && currentAccount.Role >= UserRole.Moderator)
+        {
+            LoadRecentCommands();
+        }
+    }
+
+    protected override Task OnInitializedAsync()
+    {
+        // Set active subpage based on route parameter
+        activeSubPage = SubPage?.ToLower() ?? "commands";
+        return Task.CompletedTask;
+    }
+
+
+
+    private string GetSubtitle()
+    {
+        if (currentAccount == null)
+            return "Login Required";
+        if (currentAccount.Role == UserRole.Admin)
+            return "Admin Control Panel";
+        if (currentAccount.Role == UserRole.Moderator)
+            return "Moderator Control Panel";
+        return "Access Denied";
+    }
+
+    private async Task SendPrompt()
+    {
+        if (string.IsNullOrWhiteSpace(promptInput))
+            return;
+
+        try
+        {
+            // Generate code using AI
+            var (executionCode, undoCode) = await CodeGenerator.GenerateCodeAsync(promptInput);
+
+            // Add command to queue
+            var command = CommandQueue.AddCommand(
+            userPrompt: promptInput,
+            executionCode: executionCode,
+            undoCode: undoCode,
+            source: "dashboard",
+            author: currentAccount?.DisplayName ?? "Admin",
+            imageContext: null,
+            userId: currentAccount?.Id ?? "admin",
+            aiResponse: null
+            );
+
+            ShowStatus($"✓ {promptInput}", "success");
+            promptInput = "";
+            LoadRecentCommands();
+        }
+        catch (Exception ex)
+        {
+            ShowStatus($"✗ ERROR: {ex.Message}", "error");
+            Console.WriteLine($"Send prompt failed: {ex.Message}");
+        }
+    }
+
+    private void LoadRecentCommands()
+    {
+        try
+        {
+            var history = CommandQueue.GetHistoryForUser(currentAccount?.Id ?? "admin");
+            recentCommands = history.TakeLast(10).Reverse().ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Load commands failed: {ex.Message}");
+        }
+    }
+
+    private Task RepeatCommand(int commandId)
+    {
+        try
+        {
+            var command = CommandQueue.GetHistory().FirstOrDefault(c => c.Id == commandId);
+            if (command != null)
+            {
+                CommandQueue.AddCommand(
+                userPrompt: command.UserPrompt,
+                executionCode: command.ExecutionCode,
+                undoCode: command.UndoCode,
+                source: "dashboard",
+                author: currentAccount?.DisplayName ?? "Admin",
+                imageContext: command.ImageContext,
+                userId: currentAccount?.Id ?? "admin",
+                aiResponse: null
+                );
+                ShowStatus("✓ Command repeated!", "success");
+                LoadRecentCommands();
+            }
+            else
+            {
+                ShowStatus("✗ Command not found", "error");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowStatus("✗ Error repeating command", "error");
+            Console.WriteLine($"Repeat failed: {ex.Message}");
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private Task UndoCommand(int commandId)
+    {
+        try
+        {
+            var success = CommandQueue.UndoCommand(commandId);
+            ShowStatus(success ? "✓ Command undone!" : "✗ Failed to undo", success ? "success" : "error");
+            LoadRecentCommands();
+        }
+        catch (Exception ex)
+        {
+            ShowStatus("✗ Error undoing command", "error");
+            Console.WriteLine($"Undo failed: {ex.Message}");
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void ShowStatus(string message, string type)
+    {
+        statusMessage = message;
+        statusType = type;
+        StateHasChanged();
+        _ = Task.Delay(3000).ContinueWith(async _ =>
+        {
+            await InvokeAsync(() =>
+    {
+    statusMessage = "";
+    StateHasChanged();
+            });
+        });
+    }
+
+    private void NavigateToSubPage(string subPage)
+    {
+        activeSubPage = subPage;
+        Navigation.NavigateTo($"dashboard/{subPage}");
+    }
+    
+    private async Task ManualBlast()
+    {
+        try
+        {
+            var count = Math.Max(1, Math.Min(blastCount, 10)); // Clamp between 1-10
+            var commands = QueueSlots.ManualBlast(count);
+            
+            if (commands != null)
+            {
+                ShowStatus($"💥 Queue blasted! {commands.Count} command(s) executed immediately.", "success");
+            }
+            else
+            {
+                ShowStatus("⚠️ Failed to blast queue", "error");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowStatus($"✗ ERROR: {ex.Message}", "error");
+            Console.WriteLine($"Manual blast failed: {ex.Message}");
+        }
+    }
+
+    private string GetStatusClass(CommandStatus status) => status switch
+    {
+        CommandStatus.Executed => "executed",
+        CommandStatus.Failed => "failed",
+        CommandStatus.Queued => "queued",
+        CommandStatus.Undone => "undone",
+        _ => "pending"
+    };
+
+    private string GetStatusText(CommandStatus status) => status.ToString();
+}
+

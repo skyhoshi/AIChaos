@@ -1,0 +1,706 @@
+@page "/"
+@rendermode InteractiveServer
+@inject AccountService AccountService
+@inject CommandQueueService CommandQueue
+@inject AiCodeGeneratorService CodeGenerator
+@inject ImageModerationService ModerationService
+@inject SettingsService SettingsService
+@inject TestClientService TestClientService
+@inject RefundService RefundService
+@inject YouTubeService YouTubeService
+@inject HttpClient Http
+@inject IJSRuntime JS
+@using AIChaos.Brain.Components.Layout
+@using AIChaos.Brain.Components.Shared
+@using System.Net.Http.Json
+@implements IDisposable
+
+<PageTitle>Chaos - Viewer Control</PageTitle>
+<SectionContent SectionId="PageSections.Title">🎮 CHAOS</SectionContent>
+<SectionContent SectionId="PageSections.Subtitle">Control the streamer's game!</SectionContent>
+
+@if (!YouTubeService.IsListening)
+{
+    <div class="card" style="text-align: center; padding: 60px 20px;">
+        <h2 style="font-size: 32px; margin-bottom: 20px;">📺 Stream Offline</h2>
+        <p style="color: var(--text-dim); font-size: 18px;">Come back soon!</p>
+        <p style="color: var(--text-dim); font-size: 14px; margin-top: 10px;">The stream is not currently active.</p>
+    </div>
+}
+else
+{
+<div class="card">
+    <h2>Send Your Idea</h2>
+    <p style="color: var(--text-dim); font-size: 14px; margin-bottom: 15px;">Each dollar gets you one Idea. Be creative - funny, helpful, or chaotic!</p>
+    <div class="form-group">
+        <textarea @bind="promptInput" placeholder="@GetPlaceholder()" disabled="@(currentAccount == null)"></textarea>
+    </div>
+
+    <div class="form-group" style="margin-bottom: 15px;">
+        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+            <input type="checkbox" @bind="interactiveMode" style="width: 18px; height: 18px;">
+            <span>🔄 Interactive Mode</span>
+            <span style="color: var(--text-dim); font-size: 12px;">(AI iterates with game)</span>
+        </label>
+    </div>
+
+    <button @onclick="SubmitCommand" disabled="@(IsButtonDisabled())">
+        @if (isSubmitting)
+        {
+            <text>⏳ SENDING...</text>
+        }
+        else if (currentAccount == null)
+        {
+            <text>🔒 LOGIN TO PLAY</text>
+        }
+        else if (currentAccount.CreditBalance < Constants.CommandCost)
+        {
+            <text>💸 You'll need to donate again to send another</text>
+        }
+        else
+        {
+            <text>⚡ SEND CHAOS</text>
+        }
+    </button>
+    
+    @if (!string.IsNullOrEmpty(statusMessage))
+    {
+        <div style="margin-top: 15px;">
+            <div class="alert alert-@statusType">@statusMessage</div>
+        </div>
+    }
+    
+    @if (activeInteractiveSession != null)
+    {
+        <div class="interactive-status" style="margin-top: 15px; padding: 15px; background: rgba(0,255,0,0.1); border: 1px solid var(--success); border-radius: 8px; position: relative;">
+            <button @onclick="DismissInteractiveStatus" style="position: absolute; top: 10px; right: 10px; background: transparent; border: 1px solid var(--text-dim); color: var(--text-dim); padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">✕ Dismiss</button>
+            <h4 style="margin: 0 0 10px 0;">
+                🔄 Interactive Session 
+                <span style="font-size: 12px;">
+                    @if (activeInteractiveSession.IsComplete)
+                    {
+                        @if (activeInteractiveSession.Status == "complete")
+                        {
+                            <span style="color: var(--success);">✓ Complete</span>
+                        }
+                        else
+                        {
+                            <span style="color: var(--error);">✗ Failed</span>
+                        }
+                    }
+                    else
+                    {
+                        <span style="color: var(--warning);">⏳ In Progress</span>
+                    }
+                </span>
+            </h4>
+            <div style="margin: 5px 0;">
+                <strong>Phase:</strong> <span class="phase-badge" style="background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 4px; font-size: 12px;">@activeInteractiveSession.CurrentPhase</span>
+            </div>
+            <div style="margin: 5px 0;">
+                <strong>Iteration:</strong> @activeInteractiveSession.Iteration / 5
+            </div>
+            @if (activeInteractiveSession.Steps.Any())
+            {
+                <div style="margin-top: 10px;">
+                    @foreach (var step in activeInteractiveSession.Steps)
+                    {
+                        <div class="interactive-step" style="margin: 5px 0; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 12px;">
+                            <div><strong>Step @step.StepNumber:</strong> @step.Phase</div>
+                            @if (!string.IsNullOrEmpty(step.AiThinking))
+                            {
+                                <div style="color: var(--text-dim);">💭 @(step.AiThinking.Length > 100 ? step.AiThinking.Substring(0, 100) + "..." : step.AiThinking)</div>
+                            }
+                            @if (step.Success == true)
+                            {
+                                <span style="color: var(--success);">✓ Success</span>
+                            }
+                            else if (step.Success == false)
+                            {
+                                <span style="color: var(--error);">✗ @(step.Error ?? "Failed")</span>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<div class="card">
+    <h2>📋 Your Recent Ideas</h2>
+    <div id="recentCommands">
+        @if (recentCommands == null || !recentCommands.Any())
+        {
+            <div class="empty-state">@(currentAccount == null ? "Sign in to see your history..." : "No Ideas yet.")</div>
+        }
+        else
+        {
+            @foreach (var cmd in recentCommands)
+            {
+                <div class="history-item">
+                    <div style="flex: 1;">
+                        <div class="history-time">@cmd.Timestamp.ToLocalTime().ToString("HH:mm:ss")</div>
+                        <div class="history-prompt">@cmd.UserPrompt</div>
+                        <div class="history-status status-@GetStatusClass(cmd.Status)">@GetStatusText(cmd.Status)</div>
+                    </div>
+                    <div class="history-actions">
+                        <button @onclick="() => RepeatCommand(cmd.Id)" class="btn-info btn-small" title="Repeat">🔁 Redo</button>
+                        <button @onclick="() => UndoCommand(cmd.Id)" class="btn-warning btn-small" title="Undo">↩ Undo</button>
+                        <button @onclick="() => OpenRefundModal(cmd.Id)" class="btn-danger btn-small" title="Report Problem" style="font-size: 11px;">⚠️ Report</button>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+<!-- Refund Modal -->
+<Modal @bind-IsOpen="showRefundModal">
+    <h3>Report a Problem</h3>
+    <p>Why are you requesting a refund for this command?</p>
+    <div style="display: flex; flex-direction: column; gap: 10px; margin: 15px 0;">
+        <label style="display: flex; align-items: center; gap: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 5px; cursor: pointer;">
+            <input type="radio" name="refundReason" value="My request didn't work" checked="@(selectedRefundReason == "My request didn't work")" @onchange="@(() => selectedRefundReason = "My request didn't work")">
+            <span>My request didn't work / AI failed</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 5px; cursor: pointer;">
+            <input type="radio" name="refundReason" value="The streamer didn't see my request" checked="@(selectedRefundReason == "The streamer didn't see my request")" @onchange="@(() => selectedRefundReason = "The streamer didn't see my request")">
+            <span>The streamer didn't see my request</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 5px; cursor: pointer;">
+            <input type="radio" name="refundReason" value="I changed my mind" checked="@(selectedRefundReason == "I changed my mind")" @onchange="@(() => selectedRefundReason = "I changed my mind")">
+            <span>I changed my mind</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 5px; cursor: pointer;">
+            <input type="radio" name="refundReason" value="It wasn't funny" checked="@(selectedRefundReason == "It wasn't funny")" @onchange="@(() => selectedRefundReason = "It wasn't funny")">
+            <span>It wasn't funny</span>
+        </label>
+    </div>
+    <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button @onclick="() => showRefundModal = false" class="btn-secondary">Cancel</button>
+        <button @onclick="SubmitRefund" class="btn-primary">Submit Report</button>
+    </div>
+</Modal>
+}
+
+@* Login/Register Modal *@
+
+<style>
+    .radio-group {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin: 15px 0;
+    }
+
+    .radio-option {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    .radio-option:hover {
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    .radio-option input[type="radio"] {
+        cursor: pointer;
+    }
+
+    .history-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        margin-bottom: 10px;
+    }
+
+    .history-time {
+        color: var(--text-dim);
+        font-size: 12px;
+    }
+
+    .history-prompt {
+        color: var(--text);
+        margin: 5px 0;
+    }
+
+    .history-status {
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        display: inline-block;
+    }
+
+    .status-pending { background: #888; }
+    .status-pendingmoderation { background: #ff9800; color: #000; }
+    .status-queued { background: #f0ad4e; }
+    .status-executed { background: #5cb85c; }
+    .status-undone { background: #5bc0de; }
+    .status-failed { background: #d9534f; }
+
+    .interactive-status {
+        padding: 15px;
+        border-radius: 8px;
+        margin-top: 15px;
+        position: relative;
+    }
+
+    .interactive-status h4 {
+        margin: 0 0 10px 0;
+    }
+
+    .interactive-status .phase-badge {
+        background: rgba(255,255,255,0.1);
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+    }
+
+    .interactive-step {
+        margin: 5px 0;
+        padding: 8px;
+        background: rgba(0,0,0,0.2);
+        border-radius: 4px;
+        font-size: 12px;
+    }
+</style>
+
+@code {
+    [CascadingParameter]
+    private Account? currentAccount { get; set; }
+    
+    private string promptInput = "";
+    private bool interactiveMode = false;
+    private List<CommandEntry>? recentCommands;
+    private string statusMessage = "";
+    private string statusType = "info";
+    private bool isSubmitting = false;
+    private InteractiveSessionResponse? activeInteractiveSession = null;
+    private System.Threading.Timer? interactivePollingTimer = null;
+    private bool showRefundModal = false;
+    private int selectedCommandIdForRefund = 0;
+    private string selectedRefundReason = "";
+    private bool _isInitialized = false;
+    private System.Threading.Timer? streamStateRefreshTimer = null;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Only load history if we have an account and component is initialized
+        if (currentAccount != null && _isInitialized)
+        {
+            await LoadHistory();
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        _isInitialized = true;
+        
+        // Subscribe to history changes
+        CommandQueue.HistoryChanged += OnHistoryChanged;
+        
+        // Start stream state refresh timer
+        StartStreamStateRefresh();
+    }
+
+    private async void OnHistoryChanged(object? sender, EventArgs e)
+    {
+        // Reload history when it changes
+        await InvokeAsync(async () =>
+        {
+            try
+            {
+                await LoadHistory();
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in OnHistoryChanged: {ex.Message}");
+            }
+        });
+    }
+    
+    private void StartStreamStateRefresh()
+    {
+        // Refresh UI every 2 seconds to check stream state
+        streamStateRefreshTimer = new System.Threading.Timer(async _ =>
+        {
+            try
+            {
+                await InvokeAsync(() =>
+                {
+                    if (!_isInitialized)
+                        return;
+                    
+                    StateHasChanged();
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error refreshing stream state: {ex.Message}");
+            }
+        }, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
+    }
+
+    public void Dispose()
+    {
+        // Unsubscribe from events
+        CommandQueue.HistoryChanged -= OnHistoryChanged;
+        
+        // Stop interactive polling if active
+        interactivePollingTimer?.Dispose();
+        
+        // Stop stream state refresh
+        streamStateRefreshTimer?.Dispose();
+        
+        _isInitialized = false;
+    }
+
+    private async Task SubmitCommand()
+    {
+        if (currentAccount == null || string.IsNullOrWhiteSpace(promptInput) || isSubmitting)
+            return;
+        
+        isSubmitting = true;
+        StateHasChanged();
+        
+        try
+        {
+            // Check balance FIRST (before starting interactive session)
+            if (currentAccount.CreditBalance < Constants.CommandCost)
+            {
+                ShowStatus($"Insufficient credits. You need ${Constants.CommandCost:F2}", "error");
+                isSubmitting = false;
+                return;
+            }
+            
+            // If interactive mode is enabled, use the interactive endpoint
+            if (interactiveMode)
+            {
+                await SubmitInteractiveCommand();
+                return;
+            }
+            
+            // Regular command submission
+            // Use AccountService to handle the full submission flow
+            var (success, message, commandId, newBalance) = await AccountService.SubmitChaosCommandAsync(
+                currentAccount.Id,
+                promptInput,
+                codeGenerator: async (prompt) => await CodeGenerator.GenerateCodeAsync(prompt),
+                needsModeration: ModerationService.NeedsModeration,
+                extractImageUrls: ModerationService.ExtractImageUrls,
+                addPendingImage: (url, prompt, source, author, userId, cmdId) => 
+                    ModerationService.AddPendingImage(url, prompt, source, author, userId, cmdId),
+                addCommandWithStatus: (prompt, execCode, undoCode, source, author, imgCtx, userId, aiResp, status, queue) =>
+                    CommandQueue.AddCommandWithStatus(prompt, execCode, undoCode, source, author, imgCtx, userId, aiResp, status, queue),
+                isPrivateDiscordMode: SettingsService.Settings.Safety.PrivateDiscordMode,
+                isTestClientModeEnabled: TestClientService.IsEnabled
+            );
+
+            // Update balance in UI
+            currentAccount.CreditBalance = newBalance;
+
+            if (success)
+            {
+                promptInput = "";
+                await LoadHistory();
+            }
+
+            ShowStatus(message, success ? "success" : "error");
+        }
+        catch (Exception ex)
+        {
+            ShowStatus("Error submitting command", "error");
+            Console.WriteLine($"Submit failed: {ex.Message}");
+        }
+        finally
+        {
+            isSubmitting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SubmitInteractiveCommand()
+    {
+        try
+        {
+            // Use AccountService to handle credit deduction and moderation checks
+            var (success, message, commandId, newBalance) = await AccountService.SubmitInteractiveCommandAsync(
+                currentAccount!.Id,
+                promptInput,
+                needsModeration: ModerationService.NeedsModeration,
+                extractImageUrls: ModerationService.ExtractImageUrls,
+                addPendingImage: (url, prompt, source, author, userId, cmdId) => 
+                    ModerationService.AddPendingImage(url, prompt, source, author, userId, cmdId),
+                addCommandWithStatus: (prompt, execCode, undoCode, source, author, imgCtx, userId, aiResp, status, queue) =>
+                    CommandQueue.AddCommandWithStatus(prompt, execCode, undoCode, source, author, imgCtx, userId, aiResp, status, queue),
+                isPrivateDiscordMode: SettingsService.Settings.Safety.PrivateDiscordMode
+            );
+            
+            // Update balance in UI
+            currentAccount.CreditBalance = newBalance;
+            
+            if (!success)
+            {
+                // If it failed (moderation, rate limit, etc), show the error
+                ShowStatus(message, "error");
+                isSubmitting = false;
+                return;
+            }
+            
+            // If we got a command ID, it means it's pending moderation
+            if (commandId.HasValue && message.Contains("moderation"))
+            {
+                ShowStatus(message, "info");
+                promptInput = "";
+                await LoadHistory();
+                isSubmitting = false;
+                return;
+            }
+            
+            // Otherwise, start the interactive session
+            var response = await Http.PostAsJsonAsync(
+                "/trigger/interactive",
+                new { 
+                    Prompt = promptInput,
+                    Source = "web",
+                    Author = currentAccount!.DisplayName,
+                    UserId = currentAccount!.Id,
+                    MaxIterations = 5
+                });
+            
+            var data = await response.Content.ReadFromJsonAsync<InteractiveSessionResponse>();
+            
+            if (data != null && data.Status != "error")
+            {
+                activeInteractiveSession = data;
+                promptInput = "";
+                ShowStatus("🔄 Interactive session started", "info");
+                
+                // Start polling for updates
+                StartInteractivePolling(data.SessionId);
+            }
+            else
+            {
+                ShowStatus(data?.Message ?? "Failed to start interactive session", "error");
+                isSubmitting = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowStatus($"Error: {ex.Message}", "error");
+            isSubmitting = false;
+        }
+    }
+
+    private void StartInteractivePolling(int sessionId)
+    {
+        interactivePollingTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                try
+                {
+                    var response = await Http.GetAsync($"/api/interactive/{sessionId}");
+                    var data = await response.Content.ReadFromJsonAsync<InteractiveSessionResponse>();
+                    
+                    if (data != null)
+                    {
+                        activeInteractiveSession = data;
+                        StateHasChanged();
+                        
+                        if (data.IsComplete)
+                        {
+                            // Session finished
+                            StopInteractivePolling();
+                            isSubmitting = false;
+                            
+                            if (data.Status == "complete")
+                            {
+                                ShowStatus("✓ Interactive session completed successfully!", "success");
+                            }
+                            else
+                            {
+                                ShowStatus("✗ Interactive session failed", "error");
+                            }
+                            
+                            await LoadHistory();
+                            
+                            // Update balance
+                            var updatedAccount = AccountService.GetAccountById(currentAccount!.Id);
+                            if (updatedAccount != null)
+                            {
+                                currentAccount.CreditBalance = updatedAccount.CreditBalance;
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Interactive polling error: {ex.Message}");
+                }
+            });
+        }, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
+    }
+
+    private void StopInteractivePolling()
+    {
+        interactivePollingTimer?.Dispose();
+        interactivePollingTimer = null;
+    }
+
+    private Task LoadHistory()
+    {
+        if (currentAccount == null)
+            return Task.CompletedTask;
+        
+        try
+        {
+            var history = CommandQueue.GetHistoryForUser(currentAccount.Id);
+            recentCommands = history.TakeLast(10).Reverse().ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Load history failed: {ex.Message}");
+        }
+        
+        return Task.CompletedTask;
+    }
+
+    private Task UndoCommand(int commandId)
+    {
+        try
+        {
+            var success = CommandQueue.UndoCommand(commandId);
+            ShowStatus(success ? "Undo queued" : "Failed to undo command", success ? "success" : "error");
+        }
+        catch (Exception ex)
+        {
+            ShowStatus("Error undoing command", "error");
+            Console.WriteLine($"Undo failed: {ex.Message}");
+        }
+        
+        return Task.CompletedTask;
+    }
+
+    private Task RepeatCommand(int commandId)
+    {
+        try
+        {
+            var success = CommandQueue.RepeatCommand(commandId);
+            ShowStatus(success ? "Command repeated and queued" : "Failed to repeat command", success ? "success" : "error");
+        }
+        catch (Exception ex)
+        {
+            ShowStatus("Error repeating command", "error");
+            Console.WriteLine($"Repeat failed: {ex.Message}");
+        }
+        
+        return Task.CompletedTask;
+    }
+
+    private void OpenRefundModal(int commandId)
+    {
+        selectedCommandIdForRefund = commandId;
+        selectedRefundReason = "";
+        showRefundModal = true;
+    }
+
+    private async Task SubmitRefund()
+    {
+        if (string.IsNullOrEmpty(selectedRefundReason))
+        {
+            ShowStatus("Please select a reason", "error");
+            return;
+        }
+
+        if (currentAccount == null)
+        {
+            ShowStatus("You must be logged in to request a refund", "error");
+            return;
+        }
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/moderation/refund/request", new
+            {
+                UserId = currentAccount.Id,
+                UserDisplayName = currentAccount.DisplayName,
+                CommandId = selectedCommandIdForRefund,
+                Reason = selectedRefundReason
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<Dictionary<string, string>>();
+                ShowStatus(result?["message"] ?? "Report submitted", "success");
+                showRefundModal = false;
+            }
+            else
+            {
+                ShowStatus("Failed to submit report", "error");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowStatus("Error submitting report", "error");
+            Console.WriteLine($"Refund request failed: {ex.Message}");
+        }
+    }
+
+    private void ShowStatus(string message, string type)
+    {
+        statusMessage = message;
+        statusType = type;
+        StateHasChanged();
+        _ = Task.Delay(3000).ContinueWith(async _ => 
+        { 
+            await InvokeAsync(() =>
+            {
+                statusMessage = ""; 
+                StateHasChanged();
+            });
+        });
+    }
+
+    private string GetPlaceholder() => currentAccount == null ? "Login to send Ideas..." : "Ex: Make everyone tiny, Spawn 10 headcrabs...";
+
+    private bool IsButtonDisabled()
+    {
+        if (currentAccount == null || isSubmitting)
+            return true;
+        
+        // Disable if balance is below cost
+        if (currentAccount.CreditBalance < Constants.CommandCost)
+            return true;
+        
+        return false;
+    }
+
+    
+    private string GetStatusClass(CommandStatus status) => status switch
+    {
+        CommandStatus.Executed => "executed",
+        CommandStatus.Failed => "failed",
+        CommandStatus.Queued => "queued",
+        CommandStatus.Undone => "undone",
+        CommandStatus.PendingModeration => "pendingmoderation",
+        _ => "pending"
+    };
+    
+    private string GetStatusText(CommandStatus status) => status.ToString();
+
+    private void DismissInteractiveStatus()
+    {
+        activeInteractiveSession = null;
+        StateHasChanged();
+    }
+}

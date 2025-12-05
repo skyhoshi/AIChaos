@@ -14,14 +14,12 @@ public class ImageModerationService
     private readonly object _lock = new();
     private int _nextId = 1;
     
-    // Common image URL patterns
-    private static readonly Regex ImageUrlPattern = new(
-        @"(https?://[^\s]+\.(?:jpg|jpeg|png|gif|webp|bmp)(?:\?[^\s]*)?)",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    // Event for when pending images change
+    public event EventHandler? PendingImagesChanged;
     
-    // Alternative pattern for image hosting services
-    private static readonly Regex ImageHostPattern = new(
-        @"(https?://(?:i\.)?imgur\.com/[^\s]+|https?://[^\s]*discord[^\s]*\.(?:com|gg)/attachments/[^\s]+)",
+    // Pattern to match ANY URL
+    private static readonly Regex UrlPattern = new(
+        @"https?://[^\s]+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
     
     public ImageModerationService(
@@ -32,30 +30,30 @@ public class ImageModerationService
         _logger = logger;
     }
     
+    private void OnPendingImagesChanged()
+    {
+        PendingImagesChanged?.Invoke(this, EventArgs.Empty);
+    }
+    
     /// <summary>
-    /// Extracts image URLs from a prompt.
+    /// Extracts ALL URLs from a prompt.
     /// </summary>
     public List<string> ExtractImageUrls(string prompt)
     {
         var urls = new HashSet<string>();
         
-        // Find direct image URLs
-        foreach (Match match in ImageUrlPattern.Matches(prompt))
+        // Find all URLs
+        foreach (Match match in UrlPattern.Matches(prompt))
         {
-            urls.Add(match.Value.TrimEnd(')', ']', '>'));
-        }
-        
-        // Find image hosting URLs
-        foreach (Match match in ImageHostPattern.Matches(prompt))
-        {
-            urls.Add(match.Value.TrimEnd(')', ']', '>'));
+            var url = match.Value.TrimEnd(')', ']', '>', ',', '.', '!', '?', ';', ':');
+            urls.Add(url);
         }
         
         return urls.ToList();
     }
     
     /// <summary>
-    /// Checks if a prompt contains images that need moderation.
+    /// Checks if a prompt contains URLs that need moderation.
     /// </summary>
     public bool NeedsModeration(string prompt)
     {
@@ -64,15 +62,16 @@ public class ImageModerationService
     }
     
     /// <summary>
-    /// Adds an image to the moderation queue.
+    /// Adds a URL to the moderation queue.
     /// </summary>
-    public PendingImageEntry AddPendingImage(string imageUrl, string userPrompt, string source, string author, string? userId)
+    public PendingImageEntry AddPendingImage(string imageUrl, string userPrompt, string source, string author, string? userId, int? commandId = null)
     {
         lock (_lock)
         {
             var entry = new PendingImageEntry
             {
                 Id = _nextId++,
+                CommandId = commandId,
                 ImageUrl = imageUrl,
                 UserPrompt = userPrompt,
                 Source = source,
@@ -83,14 +82,15 @@ public class ImageModerationService
             };
             
             _pendingImages.Add(entry);
-            _logger.LogInformation("[MODERATION] Image queued for review: {Url}", imageUrl);
+            _logger.LogInformation("[MODERATION] URL queued for review (Command #{CommandId}): {Url}", commandId, imageUrl);
             
+            OnPendingImagesChanged();
             return entry;
         }
     }
     
     /// <summary>
-    /// Gets all pending images awaiting moderation.
+    /// Gets all pending URLs awaiting moderation.
     /// </summary>
     public List<PendingImageEntry> GetPendingImages()
     {
@@ -104,7 +104,7 @@ public class ImageModerationService
     }
     
     /// <summary>
-    /// Gets all images (including reviewed ones).
+    /// Gets all URLs (including reviewed ones).
     /// </summary>
     public List<PendingImageEntry> GetAllImages()
     {
@@ -115,7 +115,7 @@ public class ImageModerationService
     }
     
     /// <summary>
-    /// Approves an image for processing.
+    /// Approves a URL for processing.
     /// </summary>
     public PendingImageEntry? ApproveImage(int imageId)
     {
@@ -126,14 +126,15 @@ public class ImageModerationService
             
             entry.Status = ImageModerationStatus.Approved;
             entry.ReviewedAt = DateTime.UtcNow;
-            _logger.LogInformation("[MODERATION] Image #{Id} APPROVED: {Url}", imageId, entry.ImageUrl);
+            _logger.LogInformation("[MODERATION] URL #{Id} APPROVED: {Url}", imageId, entry.ImageUrl);
             
+            OnPendingImagesChanged();
             return entry;
         }
     }
     
     /// <summary>
-    /// Denies an image.
+    /// Denies a URL.
     /// </summary>
     public PendingImageEntry? DenyImage(int imageId)
     {
@@ -144,14 +145,15 @@ public class ImageModerationService
             
             entry.Status = ImageModerationStatus.Denied;
             entry.ReviewedAt = DateTime.UtcNow;
-            _logger.LogInformation("[MODERATION] Image #{Id} DENIED: {Url}", imageId, entry.ImageUrl);
+            _logger.LogInformation("[MODERATION] URL #{Id} DENIED: {Url}", imageId, entry.ImageUrl);
             
+            OnPendingImagesChanged();
             return entry;
         }
     }
     
     /// <summary>
-    /// Gets an image by ID.
+    /// Gets a URL by ID.
     /// </summary>
     public PendingImageEntry? GetImage(int imageId)
     {
@@ -162,7 +164,7 @@ public class ImageModerationService
     }
     
     /// <summary>
-    /// Cleans up old reviewed images (older than 1 hour).
+    /// Cleans up old reviewed URLs (older than 1 hour).
     /// </summary>
     public void CleanupOldEntries()
     {
@@ -177,7 +179,7 @@ public class ImageModerationService
     }
     
     /// <summary>
-    /// Gets count of pending images.
+    /// Gets count of pending URLs.
     /// </summary>
     public int PendingCount
     {

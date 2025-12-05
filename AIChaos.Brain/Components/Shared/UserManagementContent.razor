@@ -1,0 +1,226 @@
+@inject AccountService AccountService
+@inject IJSRuntime JS
+@using AIChaos.Brain.Models
+
+<div class="card">
+    <h2>👥 User Management</h2>
+    
+    @if (!string.IsNullOrEmpty(alertMessage))
+    {
+        <div class="alert alert-@alertType">@alertMessage</div>
+    }
+    
+    <button @onclick="LoadUsers" class="btn-secondary" style="margin-bottom: 20px;">🔄 Refresh</button>
+    
+    <div class="users-list">
+        @if (users == null || !users.Any())
+        {
+            <div class="empty-state">No users found</div>
+        }
+        else
+        {
+            <table class="users-table">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Display Name</th>
+                        <th>Role</th>
+                        <th>Credits</th>
+                        <th>Created</th>
+                        <th>YouTube</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var user in users)
+                    {
+                        <tr>
+                            <td>@user.Username</td>
+                            <td>@user.DisplayName</td>
+                            <td>
+                                <select @onchange='e => UpdateRole(user.Id, e.Value?.ToString())' value="@user.Role">
+                                    <option value="@UserRole.User">User</option>
+                                    <option value="@UserRole.Moderator">Moderator</option>
+                                    <option value="@UserRole.Admin">Admin</option>
+                                </select>
+                            </td>
+                            <td>$@user.CreditBalance.ToString("F2")</td>
+                            <td>@user.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd")</td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(user.LinkedYouTubeChannelId))
+                                {
+                                    <span class="badge badge-success">✓ Linked</span>
+                                }
+                                else
+                                {
+                                    <span class="badge badge-secondary">-</span>
+                                }
+                            </td>
+                            <td>
+                                <button @onclick="() => DeleteUser(user.Id, user.Username)" class="btn-danger btn-sm">
+                                    🗑️ Delete
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+<style>
+    .users-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+    }
+
+    .users-table th,
+    .users-table td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .users-table th {
+        background: rgba(255, 255, 255, 0.05);
+        font-weight: 600;
+        color: var(--accent);
+    }
+
+    .users-table tr:hover {
+        background: rgba(255, 255, 255, 0.02);
+    }
+
+    .users-table select {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: var(--text);
+        padding: 4px 8px;
+        border-radius: 4px;
+    }
+
+    .badge {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+
+    .badge-success {
+        background: #28a745;
+        color: white;
+    }
+
+    .badge-secondary {
+        background: #6c757d;
+        color: white;
+    }
+
+    .btn-sm {
+        padding: 6px 12px;
+        font-size: 12px;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 40px;
+        color: var(--text-dim);
+    }
+</style>
+
+@code {
+    private List<Account>? users;
+    private string alertMessage = "";
+    private string alertType = "info";
+
+    protected override Task OnInitializedAsync()
+    {
+        LoadUsers();
+        return Task.CompletedTask;
+    }
+
+    private void LoadUsers()
+    {
+        try
+        {
+            users = AccountService.GetAllAccounts();
+            alertMessage = "";
+        }
+        catch (Exception ex)
+        {
+            alertMessage = $"Failed to load users: {ex.Message}";
+            alertType = "error";
+        }
+    }
+
+    private async Task UpdateRole(string userId, string? newRoleStr)
+    {
+        if (string.IsNullOrEmpty(newRoleStr))
+            return;
+            
+        try
+        {
+            if (!Enum.TryParse<UserRole>(newRoleStr, out var newRole))
+            {
+                alertMessage = "Invalid role selected";
+                alertType = "error";
+                return;
+            }
+
+            if (AccountService.UpdateUserRole(userId, newRole))
+            {
+                LoadUsers();
+                alertMessage = $"Role updated successfully";
+                alertType = "success";
+                
+                // Clear message after 3 seconds
+                await Task.Delay(3000);
+                alertMessage = "";
+            }
+            else
+            {
+                alertMessage = "Failed to update role";
+                alertType = "error";
+            }
+        }
+        catch (Exception ex)
+        {
+            alertMessage = $"Error updating role: {ex.Message}";
+            alertType = "error";
+        }
+    }
+
+    private async Task DeleteUser(string userId, string username)
+    {
+        var confirmed = await JS.InvokeAsync<bool>("confirm", $"Are you sure you want to delete user '{username}'? This action cannot be undone.");
+        
+        if (!confirmed)
+            return;
+
+        try
+        {
+            if (AccountService.DeleteAccount(userId))
+            {
+                LoadUsers();
+                alertMessage = $"User '{username}' deleted successfully";
+                alertType = "success";
+                
+                // Clear message after 3 seconds
+                await Task.Delay(3000);
+                alertMessage = "";
+            }
+            else
+            {
+                alertMessage = "Failed to delete user";
+                alertType = "error";
+            }
+        }
+        catch (Exception ex)
+        {
+            alertMessage = $"Error deleting user: {ex.Message}";
+            alertType = "error";
+        }
+    }
+}

@@ -21,9 +21,17 @@ public class CommandQueueService
     
     public UserPreferences Preferences { get; } = new();
     
+    // Event for when history changes
+    public event EventHandler? HistoryChanged;
+    
     public CommandQueueService()
     {
         LoadSavedPayloads();
+    }
+    
+    private void OnHistoryChanged()
+    {
+        HistoryChanged?.Invoke(this, EventArgs.Empty);
     }
     
     /// <summary>
@@ -71,6 +79,50 @@ public class CommandQueueService
                 _history.RemoveAt(0);
             }
             
+            OnHistoryChanged(); // Notify that history has changed
+            
+            return entry;
+        }
+    }
+    
+    /// <summary>
+    /// Adds a command to history with a specific status.
+    /// </summary>
+    public CommandEntry AddCommandWithStatus(string userPrompt, string executionCode, string undoCode, string source, string author, string? imageContext, string? userId, string? aiResponse, CommandStatus status, bool queueForExecution = false)
+    {
+        lock (_lock)
+        {
+            // Create history entry with specified status
+            var entry = new CommandEntry
+            {
+                Id = _nextId++,
+                Timestamp = DateTime.UtcNow,
+                UserPrompt = userPrompt,
+                ExecutionCode = executionCode,
+                UndoCode = undoCode,
+                ImageContext = imageContext,
+                Source = source,
+                Author = author,
+                UserId = userId,
+                AiResponse = aiResponse,
+                Status = status
+            };
+            
+            // Add to execution queue with ID (only if requested)
+            if (queueForExecution)
+            {
+                _queue.Add((entry.Id, executionCode));
+            }
+            
+            _history.Add(entry);
+            
+            // Trim history if needed
+            while (_history.Count > Preferences.MaxHistoryLength)
+            {
+                _history.RemoveAt(0);
+            }
+            
+            OnHistoryChanged();
             return entry;
         }
     }
@@ -90,6 +142,32 @@ public class CommandQueueService
                 return item;
             }
             return null;
+        }
+    }
+    
+    /// <summary>
+    /// Peeks at the next command without removing it from the queue.
+    /// </summary>
+    public (int CommandId, string Code)? PeekNextCommand()
+    {
+        lock (_lock)
+        {
+            if (_queue.Count > 0)
+            {
+                return _queue[0];
+            }
+            return null;
+        }
+    }
+    
+    /// <summary>
+    /// Gets the current queue count.
+    /// </summary>
+    public int GetQueueCount()
+    {
+        lock (_lock)
+        {
+            return _queue.Count;
         }
     }
     
@@ -181,6 +259,18 @@ public class CommandQueueService
     }
     
     /// <summary>
+    /// Queues an existing command for execution.
+    /// </summary>
+    public void QueueCommand(CommandEntry command)
+    {
+        lock (_lock)
+        {
+            _queue.Add((command.Id, command.ExecutionCode));
+            OnHistoryChanged();
+        }
+    }
+    
+    /// <summary>
     /// Reports the execution result from GMod.
     /// </summary>
     public bool ReportExecutionResult(int commandId, bool success, string? error)
@@ -200,6 +290,8 @@ public class CommandQueueService
                 command.Status = CommandStatus.Failed;
                 command.ErrorMessage = error;
             }
+            
+            OnHistoryChanged();
             return true;
         }
     }
