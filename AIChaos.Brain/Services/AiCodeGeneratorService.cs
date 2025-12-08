@@ -275,6 +275,13 @@ public class AiCodeGeneratorService
                 var executionCode = parts[0].Trim();
                 var undoCode = parts.Length > 1 ? parts[1].Trim() : "print(\"No undo code provided\")";
                 
+                // Strip URLs if blocking is enabled
+                if (settings.General.BlockLinksInGeneratedCode)
+                {
+                    executionCode = StripUrlsFromCode(executionCode);
+                    undoCode = StripUrlsFromCode(undoCode);
+                }
+                
                 // Validate the generated code for dangerous patterns
                 if (ContainsDangerousPatterns(executionCode))
                 {
@@ -287,14 +294,22 @@ public class AiCodeGeneratorService
             }
 
             // Single code block without undo separator
-            if (ContainsDangerousPatterns(code))
+            var singleCode = code;
+            
+            // Strip URLs if blocking is enabled
+            if (settings.General.BlockLinksInGeneratedCode)
+            {
+                singleCode = StripUrlsFromCode(singleCode);
+            }
+            
+            if (ContainsDangerousPatterns(singleCode))
             {
                 _logger.LogWarning("AI generated code containing dangerous patterns (map change/disconnect/kill). Rejecting.");
                 return ("print(\"[BLOCKED] This command would break the game (map change, disconnect, or kill player).\")", 
                         "print(\"No undo needed - command was blocked\")");
             }
 
-            return (code, "print(\"Undo not available for this command\")");
+            return (singleCode, "print(\"Undo not available for this command\")");
         }
         catch (Exception ex)
         {
@@ -338,6 +353,7 @@ public class AiCodeGeneratorService
         return dangerousPatterns.Any(pattern =>
             System.Text.RegularExpressions.Regex.IsMatch(code, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase));
     }
+
 
     /// <summary>
     /// Generates force undo code for a stuck command.
@@ -404,5 +420,37 @@ public class AiCodeGeneratorService
             _logger.LogError(ex, "Failed to generate force undo code");
             return "print(\"Force undo generation failed\")";
         }
+    }
+
+    /// <summary>
+    /// Strips URLs and http.Fetch calls from generated code.
+    /// Removes both literal URLs and http.Fetch function calls to prevent external resource access.
+    /// </summary>
+    private static string StripUrlsFromCode(string code)
+    {
+        // Pattern for http.Fetch and HTTP.Fetch calls (remove entire function call)
+        var httpFetchPattern = @"http\.Fetch\s*\([^)]*\)";
+        var httpFetchPatternUpper = @"HTTP\.Fetch\s*\([^)]*\)";
+        
+        // Pattern for literal URLs (http:// or https://)
+        var urlPattern = @"https?://[^\s""'\)]+";
+        
+        var cleaned = code;
+        
+        // Remove http.Fetch calls
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, httpFetchPattern, 
+            "-- [URL BLOCKED] http.Fetch removed", 
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, httpFetchPatternUpper, 
+            "-- [URL BLOCKED] HTTP.Fetch removed", 
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        
+        // Remove literal URLs
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, urlPattern, 
+            "[URL_BLOCKED]", 
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        
+        return cleaned;
     }
 }

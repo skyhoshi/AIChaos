@@ -136,6 +136,19 @@ public class SettingsService
     }
     
     /// <summary>
+    /// Updates General settings including link blocking.
+    /// </summary>
+    public void UpdateGeneralSettings(bool streamMode, bool blockLinksInGeneratedCode)
+    {
+        lock (_lock)
+        {
+            _settings.General.StreamMode = streamMode;
+            _settings.General.BlockLinksInGeneratedCode = blockLinksInGeneratedCode;
+            SaveSettings();
+        }
+    }
+    
+    /// <summary>
     /// Updates Twitch settings.
     /// </summary>
     public void UpdateTwitch(TwitchSettings twitch)

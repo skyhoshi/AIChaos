@@ -42,6 +42,29 @@
         </small>
     </div>
 
+    <div class="form-group" style="margin-top: 15px;">
+        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+            <input type="checkbox" @bind="blockLinksInCode" style="width: 18px; height: 18px;">
+            <div>
+                <strong>Block URLs in Generated Code</strong>
+                <div style="color: var(--text-dim); font-size: 13px; margin-top: 3px;">
+                    @if (blockLinksInCode)
+                    {
+                        <span>🔒 Enabled - All URLs/links will be stripped from AI-generated code</span>
+                    }
+                    else
+                    {
+                        <span>🌐 Disabled - AI can generate code with URLs (use with caution)</span>
+                    }
+                </div>
+            </div>
+        </label>
+        <small style="display: block; margin-top: 8px; color: var(--text-dim);">
+            When enabled: Prevents AI from generating code that includes http.Fetch, URLs, or other external resource access.<br/>
+            Recommended: Keep enabled for public streams to prevent malicious link injection.
+        </small>
+    </div>
+
     <button @onclick="SaveGeneralSettings">💾 Save General Settings</button>
 </div>
 
@@ -264,6 +287,7 @@
 
     // General Settings
     private bool streamMode = false;
+    private bool blockLinksInCode = true;
 
     // OpenRouter
     private bool openRouterConfigured = false;
@@ -305,6 +329,7 @@
 
             // General Settings
             streamMode = settings.General.StreamMode;
+            blockLinksInCode = settings.General.BlockLinksInGeneratedCode;
 
             openRouterConfigured = SettingsService.IsOpenRouterConfigured;
 
@@ -369,7 +394,7 @@ new Model { Id = "x-ai/grok-4.1-fast:free", Name = "Grok 4.1 Fast (Free)", Provi
     {
         try
         {
-            SettingsService.UpdateGeneralSettings(streamMode);
+            SettingsService.UpdateGeneralSettings(streamMode, blockLinksInCode);
             ShowAlert("General settings saved! Changes will take effect on next page load.", "success");
         }
         catch
@@ -420,7 +445,9 @@ new Model { Id = "x-ai/grok-4.1-fast:free", Name = "Grok 4.1 Fast (Free)", Provi
     {
         try
         {
-            SettingsService.UpdateTestClient(testClientEnabled);
+            var settings = SettingsService.Settings.TestClient;
+            settings.Enabled = testClientEnabled;
+            SettingsService.SaveSettings();
             ShowAlert(testClientEnabled ? "Test Client Mode enabled!" : "Test Client Mode disabled", testClientEnabled ? "success" :
             "info");
             await LoadSetupStatus();
@@ -436,7 +463,10 @@ new Model { Id = "x-ai/grok-4.1-fast:free", Name = "Grok 4.1 Fast (Free)", Provi
     {
         try
         {
-            SettingsService.UpdateTestClientSettings(testClientMap, testClientTimeout);
+            var settings = SettingsService.Settings.TestClient;
+            settings.TestMap = testClientMap;
+            settings.TimeoutSeconds = testClientTimeout;
+            SettingsService.SaveSettings();
             ShowAlert("Test client settings saved!", "success");
         }
         catch

@@ -73,6 +73,12 @@ public class GeneralSettings
     /// - Admin login is still required for dashboard access
     /// </summary>
     public bool StreamMode { get; set; } = false;
+    
+    /// <summary>
+    /// When enabled, all URLs/links found in AI-generated code will be stripped out.
+    /// This prevents the AI from generating code that accesses external resources.
+    /// </summary>
+    public bool BlockLinksInGeneratedCode { get; set; } = true;
 }
 
 public class AdminSettings
