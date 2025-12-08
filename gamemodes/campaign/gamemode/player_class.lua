@@ -18,6 +18,16 @@ function PLAYER:Spawn()
 	-- else
 	-- 	ply:RemoveSuit()
 	-- end
+
+	--remove suit on intro maps
+	local mapname = game.GetMap()
+	if mapname == "d1_trainstation_01" or
+		mapname == "d1_trainstation_02" or
+		mapname == "d1_trainstation_03" or
+		mapname == "d1_trainstation_04" or
+		mapname == "d1_trainstation_05" then
+		self.Player:RemoveSuit()
+	end
 end
 
 function PLAYER:Loadout()
