@@ -347,7 +347,16 @@ public class AiCodeGeneratorService
             @"SetHealth\s*\(\s*-",
             @":Kill\s*\(\s*\)",
             @"TakeDamage\s*\(\s*9999",
-            @"TakeDamage\s*\(\s*999999"
+            @"TakeDamage\s*\(\s*999999",
+            
+            // URL opening functions
+            @"html:?OpenURL",
+            @"gui\.OpenURL",
+            @"steamworks\.OpenURL",
+            
+            // External iframes in HTML
+            @"<iframe[^>]*src\s*=\s*[""']https?://",
+            @"iframe.*src.*http"
         };
 
         return dangerousPatterns.Any(pattern =>
@@ -432,6 +441,15 @@ public class AiCodeGeneratorService
         var httpFetchPattern = @"http\.Fetch\s*\([^)]*\)";
         var httpFetchPatternUpper = @"HTTP\.Fetch\s*\([^)]*\)";
         
+        // Pattern for URL opening functions
+        var htmlOpenUrlPattern = @"html:?OpenURL\s*\([^)]*\)";
+        var guiOpenUrlPattern = @"gui\.OpenURL\s*\([^)]*\)";
+        var steamworksOpenUrlPattern = @"steamworks\.OpenURL\s*\([^)]*\)";
+        
+        // Pattern for iframes with external sources
+        var iframePattern = @"<iframe[^>]*src\s*=\s*[""']https?://[^""']*[""'][^>]*>";
+        var iframeSrcPattern = @"<iframe[^>]*src\s*=\s*[""'][^""']*[""']";
+        
         // Pattern for literal URLs (http:// or https://)
         var urlPattern = @"https?://[^\s""'\)]+";
         
@@ -444,6 +462,29 @@ public class AiCodeGeneratorService
         
         cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, httpFetchPatternUpper, 
             "-- [URL BLOCKED] HTTP.Fetch removed", 
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        
+        // Remove URL opening function calls
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, htmlOpenUrlPattern, 
+            "-- [URL BLOCKED] html:OpenURL removed", 
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, guiOpenUrlPattern, 
+            "-- [URL BLOCKED] gui.OpenURL removed", 
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, steamworksOpenUrlPattern, 
+            "-- [URL BLOCKED] steamworks.OpenURL removed", 
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        
+        // Remove iframes with external sources - replace entire iframe tag
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, iframePattern, 
+            "<!-- [IFRAME BLOCKED] External iframe removed -->", 
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        
+        // Fallback: strip src attribute from any remaining iframes
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, iframeSrcPattern, 
+            "<iframe src=\"[BLOCKED]\"", 
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
         // Remove literal URLs
