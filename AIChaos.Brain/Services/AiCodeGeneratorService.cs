@@ -356,6 +356,8 @@ public class AiCodeGeneratorService
             [@"RunConsoleCommand.*[""']kill[""']"] = "Kill command",
             [@"game\.ConsoleCommand.*kill"] = "Kill command",
             [@"RunConsoleCommand.*[""']suicide[""']"] = "Suicide command",
+            [@"RunConsoleCommand.*[""']screenshot[""']"] = "Screenshot command (via screenshot concmd)",
+            [@"RunConsoleCommand.*[""']jpeg[""']"] = "Screenshot command (via jpeg concmd)",
             [@"game\.ConsoleCommand.*suicide"] = "Suicide command",
             [@"SetHealth\s*\(\s*0\s*\)"] = "Instant death (SetHealth to 0)",
             [@"SetHealth\s*\(\s*-"] = "Instant death (negative health)",
