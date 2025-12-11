@@ -669,23 +669,19 @@ else
             // Check and deduct credits in Stream Mode
             if (!isSingleUserMode)
             {
-                if (currentAccount.CreditBalance < Constants.CommandCost)
-                {
-                    ShowStatus($"Insufficient credits. You have ${currentAccount.CreditBalance:F2}, but need ${Constants.CommandCost:F2}", "error");
-                    return;
-                }
-
                 if (!AccountService.DeductCredits(currentAccount.Id, Constants.CommandCost))
                 {
-                    ShowStatus("Failed to deduct credits", "error");
+                    // Refresh to get current balance for error message
+                    var currentBalance = AccountService.GetAccountById(currentAccount.Id)?.CreditBalance ?? currentAccount.CreditBalance;
+                    ShowStatus($"Insufficient credits. You have ${currentBalance:F2}, but need ${Constants.CommandCost:F2}", "error");
                     return;
                 }
 
-                // Refresh the account balance from the service
+                // Refresh the account from the service
                 var updatedAccount = AccountService.GetAccountById(currentAccount.Id);
                 if (updatedAccount != null)
                 {
-                    currentAccount.CreditBalance = updatedAccount.CreditBalance;
+                    currentAccount = updatedAccount;
                 }
             }
 
@@ -694,7 +690,7 @@ else
                 userPrompt: command.UserPrompt,
                 executionCode: command.ExecutionCode,
                 undoCode: command.UndoCode,
-                source: "history_redo",
+                source: "history_repeat",
                 author: currentAccount.DisplayName,
                 imageContext: command.ImageContext,
                 userId: currentAccount.Id,

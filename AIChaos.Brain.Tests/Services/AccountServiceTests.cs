@@ -230,7 +230,7 @@ public class AccountServiceTests
         var mockLogger = new Mock<ILogger<AccountService>>();
         var service = new AccountService(mockLogger.Object);
         
-        var (success, _, account) = service.CreateAccount("testuser_" + Guid.NewGuid(), "password123", "Test User");
+        var (_, _, account) = service.CreateAccount("testuser_" + Guid.NewGuid(), "password123", "Test User");
         Assert.NotNull(account);
         
         // Add initial credits
@@ -255,7 +255,7 @@ public class AccountServiceTests
         var mockLogger = new Mock<ILogger<AccountService>>();
         var service = new AccountService(mockLogger.Object);
         
-        var (success, _, account) = service.CreateAccount("testuser_" + Guid.NewGuid(), "password123", "Test User");
+        var (_, _, account) = service.CreateAccount("testuser_" + Guid.NewGuid(), "password123", "Test User");
         Assert.NotNull(account);
         
         // Add only 0.50 credits
@@ -294,7 +294,7 @@ public class AccountServiceTests
         var mockLogger = new Mock<ILogger<AccountService>>();
         var service = new AccountService(mockLogger.Object);
         
-        var (success, _, account) = service.CreateAccount("testuser_" + Guid.NewGuid(), "password123", "Test User");
+        var (_, _, account) = service.CreateAccount("testuser_" + Guid.NewGuid(), "password123", "Test User");
         Assert.NotNull(account);
         
         // Add initial credits

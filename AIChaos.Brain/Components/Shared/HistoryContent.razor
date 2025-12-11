@@ -332,23 +332,19 @@
             // Check and deduct credits in Stream Mode
             if (!isSingleUserMode)
             {
-                if (CurrentAccount.CreditBalance < Constants.CommandCost)
-                {
-                    Console.WriteLine($"RepeatCommand failed: Insufficient credits. Have ${CurrentAccount.CreditBalance:F2}, need ${Constants.CommandCost:F2}");
-                    return;
-                }
-
                 if (!AccountService.DeductCredits(CurrentAccount.Id, Constants.CommandCost))
                 {
-                    Console.WriteLine("RepeatCommand failed: Failed to deduct credits");
+                    // Refresh to get current balance for error message
+                    var currentBalance = AccountService.GetAccountById(CurrentAccount.Id)?.CreditBalance ?? CurrentAccount.CreditBalance;
+                    Console.WriteLine($"RepeatCommand failed: Insufficient credits. Have ${currentBalance:F2}, need ${Constants.CommandCost:F2}");
                     return;
                 }
 
-                // Refresh the account balance from the service
+                // Refresh the account from the service
                 var updatedAccount = AccountService.GetAccountById(CurrentAccount.Id);
                 if (updatedAccount != null)
                 {
-                    CurrentAccount.CreditBalance = updatedAccount.CreditBalance;
+                    CurrentAccount = updatedAccount;
                     Console.WriteLine($"Credits deducted for repeat. New balance: ${CurrentAccount.CreditBalance:F2}");
                 }
             }
