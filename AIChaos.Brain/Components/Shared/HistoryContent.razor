@@ -344,9 +344,13 @@
                     return;
                 }
 
-                // Update the current account balance
-                CurrentAccount.CreditBalance -= Constants.CommandCost;
-                Console.WriteLine($"Credits deducted for repeat. New balance: ${CurrentAccount.CreditBalance:F2}");
+                // Refresh the account balance from the service
+                var updatedAccount = AccountService.GetAccountById(CurrentAccount.Id);
+                if (updatedAccount != null)
+                {
+                    CurrentAccount.CreditBalance = updatedAccount.CreditBalance;
+                    Console.WriteLine($"Credits deducted for repeat. New balance: ${CurrentAccount.CreditBalance:F2}");
+                }
             }
 
             CommandQueue.AddCommand(

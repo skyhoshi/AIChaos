@@ -681,8 +681,12 @@ else
                     return;
                 }
 
-                // Update the current account balance
-                currentAccount.CreditBalance -= Constants.CommandCost;
+                // Refresh the account balance from the service
+                var updatedAccount = AccountService.GetAccountById(currentAccount.Id);
+                if (updatedAccount != null)
+                {
+                    currentAccount.CreditBalance = updatedAccount.CreditBalance;
+                }
             }
 
             // Add the command again as a new entry

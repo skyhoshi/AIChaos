@@ -459,8 +459,12 @@ else
                     return Task.CompletedTask;
                 }
 
-                // Update the current account balance
-                currentAccount.CreditBalance -= Constants.CommandCost;
+                // Refresh the account balance from the service
+                var updatedAccount = AccountService.GetAccountById(currentAccount.Id);
+                if (updatedAccount != null)
+                {
+                    currentAccount.CreditBalance = updatedAccount.CreditBalance;
+                }
             }
 
             CommandQueue.AddCommand(
